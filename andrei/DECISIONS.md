@@ -240,6 +240,25 @@ Teammates: keep your own notes in a folder named after you, like this one.
   the `:free` tier may be rate-limited when the judges run 800 cases × 5. Keep cache plus fallback so a refusal can
   never stop a run. Data: `eval/drafts/bakeoff.json`.
 
+## D23 — Bake-off on all 226 labelled cases: pplx-decider confirmed
+- Same SOP close question as D22, every labelled case, each asked twice (Jev ~$0.08, pplx free):
+
+  | Model | Threshold | Right | Wrongful closes | Closable closed | Verdict flips between runs |
+  |---|---|---|---|---|---|
+  | `pplx-decider-v1.3:free` | ≥ 0.9 | 210/226 | **0** | 90/106 | 0 |
+  | `pplx-decider-v1.3:free` | ≥ 0.7 | **222/226** | 1 | **103/106** | 0 |
+  | `jev-1.13` | ≥ 0.5 | 189/226 | 3 | 72/106 | 4 |
+  | `jev-1.13` | ≥ 0.9 | 122/226 | 0 | 2/106 | 2 |
+
+- pplx-decider at ≥ 0.7 is perfect on bank (58/58), e-money (53/53) and investment (60/60). All 4 misses are payments and
+  FX (3 closable cases scored 0.57–0.67, 1 wrongful close at 0.72 on PX-CS123153), which is where our own open question
+  sits (D20).
+- Jev at ≥ 0.9 almost never says yes (2 of 106 closable). As a tier-1 yes/no reader with a 0.90 cut-off it will mostly
+  return "unknown". **Fedya's reader (merged) uses Jev at tier 1: recommend switching tier 1 to pplx-decider v1.3 with
+  Jev as fallback**, or lowering Jev's yes cut-off only after a test on atomic questions.
+- First calibration of the full pplx labeller (verdict then code, SOP-worded choice questions, `eval/pplx_label.py`):
+  bank verdict agrees 56/58, code 49/58, would-be wrongful closes 0. Others running.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
