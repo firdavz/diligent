@@ -1,0 +1,246 @@
+<title>Label Review Desk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a review desk — queue on the left, the case file on the right, the decision pinned under it. */
+  :root {
+    --bg: #f4f5f2; --panel: #ffffff; --well: #eef0ec; --fg: #1c211d; --muted: #5d665f; --line: #d9ddd6;
+    --accent: #2f6b4f; --accent-fg: #ffffff; --accent-soft: #e3efe8;
+    --ok: #2f7d4f; --warn: #a36a00; --bad: #b3372b; --sel: #e6eee9;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #131714; --panel: #1b201c; --well: #222823; --fg: #e5e9e4; --muted: #9aa49c; --line: #303830;
+    --accent: #6fbf95; --accent-fg: #0f1a14; --accent-soft: #23362b; --ok: #6fbf95; --warn: #e0a84a; --bad: #ef7b6e; --sel: #26302a; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #131714; --panel: #1b201c; --well: #222823; --fg: #e5e9e4; --muted: #9aa49c; --line: #303830;
+    --accent: #6fbf95; --accent-fg: #0f1a14; --accent-soft: #23362b; --ok: #6fbf95; --warn: #e0a84a; --bad: #ef7b6e; --sel: #26302a; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; line-height: 1.45; }
+  .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 32px; display: grid; gap: 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+  .lede { margin: 0; color: var(--muted); max-width: 70ch; }
+  .tally { display: flex; gap: 16px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .tally b { color: var(--fg); font-weight: 600; }
+  .desk { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .desk { grid-template-columns: minmax(0, 1fr); } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+  select, textarea, button { font: inherit; color: inherit; }
+  select { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+  .queue { list-style: none; margin: 0; padding: 4px; max-height: 70vh; overflow-y: auto; }
+  .queue li button { width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 6px; display: grid; gap: 2px; cursor: pointer; }
+  .queue li button:hover { background: var(--well); }
+  .queue li button[aria-current="true"] { background: var(--sel); }
+  .queue li button:focus-visible, .btn:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .qid { font-family: var(--mono); font-size: 12.5px; font-weight: 500; display: flex; gap: 8px; align-items: center; }
+  .qsub { color: var(--muted); font-size: 12.5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--muted); flex: none; }
+  .dot.done { background: var(--ok); border-color: var(--ok); }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag { font-size: 11.5px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .tag.disagree { color: var(--warn); border-color: currentColor; }
+  .tag.wrong { color: var(--bad); border-color: currentColor; }
+  .detail { display: grid; gap: 0; }
+  .detail-head { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+  .detail-head h2 { margin: 0; font-family: var(--mono); font-size: 16px; font-weight: 500; }
+  .compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .box { background: var(--well); border-radius: 6px; padding: 10px 12px; display: grid; gap: 4px; min-width: 0; }
+  .box h3 { margin: 0; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+  .verdict { font-weight: 600; }
+  .code { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+  .note { color: var(--muted); font-size: 13px; }
+  .case { margin: 0; padding: 14px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 52vh; overflow-y: auto; border-bottom: 1px solid var(--line); }
+  .decide { padding: 14px 16px; display: grid; gap: 10px; }
+  .decide-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .decide label { font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; }
+  textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; min-height: 56px; resize: vertical; width: 100%; box-sizing: border-box; }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 7px 14px; cursor: pointer; font-weight: 500; }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .status { font-size: 12.5px; color: var(--muted); }
+  .status.err { color: var(--bad); }
+  .reviewed { font-size: 13px; color: var(--ok); }
+  .empty { padding: 24px 16px; color: var(--muted); }
+  @media (prefers-reduced-motion: no-preference) { .queue li button { transition: background .12s ease-out; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Label Review Desk</h1>
+      <p class="lede">Cases whose right answer is open to judgement under the institution's SOP, or where one of our rules disagrees with the label. Read the case file, then confirm the label or change it. Decisions are shared with the team and folded back into <span class="code">eval/labels/</span>.</p>
+    </div>
+    <div class="tally" aria-live="polite"><span><b id="n-done">0</b> reviewed</span><span><b id="n-left">0</b> to go</span></div>
+  </header>
+
+  <div class="desk">
+    <section class="panel" aria-label="Queue">
+      <div class="filters">
+        <select id="f-inst" aria-label="Institution">
+          <option value="">All institutions</option>
+          <option value="bank">Bank</option><option value="emoney">E-money</option>
+          <option value="investment">Investment</option><option value="payments_fx">Payments and FX</option>
+        </select>
+        <select id="f-why" aria-label="Reason queued">
+          <option value="">Any reason</option>
+          <option value="doubtful label">Doubtful label</option>
+          <option value="system disagrees">System disagrees</option>
+          <option value="wrongful close">Wrongful close</option>
+        </select>
+        <select id="f-state" aria-label="Review state">
+          <option value="open">Not reviewed</option>
+          <option value="">All</option>
+          <option value="done">Reviewed</option>
+        </select>
+      </div>
+      <ul class="queue" id="queue"><li class="empty">Loading the queue…</li></ul>
+    </section>
+
+    <section class="panel detail" id="detail" aria-label="Case">
+      <div class="empty">Pick a case from the queue.</div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const CODES = {
+    CLOSE: ["COLLECTION_DOCUMENTED","BUSINESS_RECORDS_RECONCILE","DOCUMENTED_EVENT","INVOICE_MATCHES","OWN_ACCOUNT","GROUP_COMPANY","THIRD_PARTY_DOCUMENTED","REFUND_OF_EARLIER_PAYMENT","RETURNING_CUSTOMER","LIST_MATCH_DIFFERENT_PARTY","WITHIN_PROFILE"],
+    RFI: ["RFI_PURPOSE_DOCUMENTS","RFI_BUSINESS_RECORDS","RFI_SOURCE_OF_FUNDS","RFI_COUNTERPARTY_DETAILS","RFI_UPDATED_PROFILE"],
+    ESCALATE: ["ESC_MULE_ACTIVITY","ESC_STRUCTURING","ESC_UNEXPLAINED_FUNDS","ESC_PASS_THROUGH","ESC_INVOICE_MISMATCH","ESC_HIGH_RISK_CORRIDOR","ESC_ACCOUNT_MISUSE","ESC_THIRD_PARTY_FUNDING","ESC_EARLY_REDEMPTION","ESC_LISTED_PARTY"],
+  };
+  const INST = {bank: "Bank", emoney: "E-money", investment: "Investment", payments_fx: "Payments and FX"};
+  const $ = (s) => document.querySelector(s);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  let items = [], decisions = {}, current = null, db = null, user = null, myId = null, names = {};
+
+  function filtered() {
+    const inst = $("#f-inst").value, why = $("#f-why").value, st = $("#f-state").value;
+    return items.filter((it) => (!inst || it.institution === inst) && (!why || it.why.includes(why))
+      && (!st || (st === "done" ? decisions[it.case_id] : !decisions[it.case_id])));
+  }
+
+  function renderQueue() {
+    const q = $("#queue");
+    q.replaceChildren();
+    const list = filtered();
+    $("#n-done").textContent = items.filter((it) => decisions[it.case_id]).length;
+    $("#n-left").textContent = items.filter((it) => !decisions[it.case_id]).length;
+    if (!items.length) { q.append(el("li", "empty", db ? "The queue is empty." : "Sign in to claude.ai to load the queue.")); return; }
+    if (!list.length) { q.append(el("li", "empty", "No cases match these filters.")); return; }
+    for (const it of list) {
+      const li = el("li"); const b = el("button"); b.type = "button";
+      b.setAttribute("aria-current", String(current === it.case_id));
+      const top = el("span", "qid"); const dot = el("span", "dot" + (decisions[it.case_id] ? " done" : ""));
+      top.append(dot, document.createTextNode(it.case_id));
+      const sub = el("span", "qsub", `${INST[it.institution]} · label ${it.label.verdict}`);
+      const tags = el("span", "tags");
+      for (const w of it.why) tags.append(el("span", "tag" + (w === "system disagrees" ? " disagree" : w === "wrongful close" ? " wrong" : ""), w));
+      b.append(top, sub, tags);
+      b.addEventListener("click", () => { current = it.case_id; renderQueue(); renderDetail(); });
+      li.append(b); q.append(li);
+    }
+  }
+
+  function box(title, verdict, code, extra) {
+    const b = el("div", "box"); b.append(el("h3", null, title), el("div", "verdict", verdict || "—"), el("div", "code", code || ""));
+    if (extra) b.append(el("div", "note", extra));
+    return b;
+  }
+
+  function fillCodes(sel, verdict, chosen) {
+    sel.replaceChildren(...(CODES[verdict] || []).map((c) => new Option(c, c, false, c === chosen)));
+  }
+
+  function renderDetail() {
+    const d = $("#detail");
+    d.replaceChildren();
+    const it = items.find((x) => x.case_id === current);
+    if (!it) { d.append(el("div", "empty", "Pick a case from the queue.")); return; }
+    const head = el("div", "detail-head"); head.append(el("h2", null, it.case_id), el("span", "qsub", INST[it.institution]));
+    const tags = el("span", "tags"); for (const w of it.why) tags.append(el("span", "tag" + (w === "system disagrees" ? " disagree" : w === "wrongful close" ? " wrong" : ""), w));
+    head.append(tags);
+    const cmp = el("div", "compare");
+    cmp.append(box(`Label (${it.label.confidence || "high"} confidence)`, it.label.verdict, it.label.reason_code, it.label.note));
+    cmp.append(box("Our system now", it.system.verdict, it.system.reason_code, it.system.reason));
+    const dec = decisions[it.case_id];
+    if (dec) {
+      const who = names[dec.by] || "Someone";
+      cmp.append(box(`Reviewed by ${who}`, dec.agree ? "Agreed with the label" : dec.verdict, dec.agree ? "" : dec.reason_code, dec.note || ""));
+    }
+    const pre = el("pre", "case", it.case_text);
+    const form = el("form", "decide");
+    const row = el("div", "decide-row");
+    const vLab = el("label", null, "Verdict"); const vSel = el("select"); vSel.id = "d-verdict";
+    for (const v of ["CLOSE", "RFI", "ESCALATE"]) vSel.append(new Option(v, v, false, v === (dec && !dec.agree ? dec.verdict : it.label.verdict)));
+    vLab.append(vSel);
+    const cLab = el("label", null, "Reason code"); const cSel = el("select"); cSel.id = "d-code";
+    fillCodes(cSel, vSel.value, dec && !dec.agree ? dec.reason_code : it.label.reason_code);
+    cLab.append(cSel);
+    vSel.addEventListener("change", () => fillCodes(cSel, vSel.value, null));
+    row.append(vLab, cLab);
+    const nLab = el("label", null, "Note (optional): what decided it"); const note = el("textarea"); note.id = "d-note"; note.value = (dec && dec.note) || ""; nLab.append(note);
+    const actions = el("div", "decide-row");
+    const agree = el("button", "btn primary", "Agree with the label"); agree.type = "button";
+    const save = el("button", "btn", "Save my answer"); save.type = "submit";
+    const status = el("span", "status"); status.setAttribute("aria-live", "polite");
+    actions.append(agree, save, status);
+    form.append(row, nLab, actions);
+    form.addEventListener("submit", (e) => { e.preventDefault(); record(it, false, vSel.value, cSel.value, note.value, status, [agree, save]); });
+    agree.addEventListener("click", () => record(it, true, it.label.verdict, it.label.reason_code, note.value, status, [agree, save]));
+    if (!db) { agree.disabled = save.disabled = true; status.textContent = "Sign in to claude.ai to record decisions."; }
+    d.append(head, cmp, pre, form);
+  }
+
+  async function record(it, isAgree, verdict, code, note, status, btns) {
+    if (!db) return;
+    btns.forEach((b) => (b.disabled = true));
+    status.className = "status"; status.textContent = "Saving…";
+    try {
+      await db.collection("decisions").doc(it.case_id).set({
+        case_id: it.case_id, agree: isAgree, verdict, reason_code: code, note: (note || "").trim(),
+        label_verdict: it.label.verdict, label_code: it.label.reason_code, by: myId || "", at: new Date().toISOString(),
+      });
+      status.textContent = "Saved.";
+      const next = filtered().find((x) => x.case_id !== it.case_id && !decisions[x.case_id]);
+      if (next) { current = next.case_id; }
+    } catch (e) {
+      status.className = "status err";
+      status.textContent = "Not saved: you may only have view access. Ask Andrei for edit or contributor access.";
+    } finally { btns.forEach((b) => (b.disabled = false)); }
+  }
+
+  async function resolveNames() {
+    if (!user) return;
+    const ids = [...new Set(Object.values(decisions).map((d) => d.by).filter(Boolean))];
+    if (!ids.length) return;
+    try { const ps = await user.profiles(ids); for (const id of ids) names[id] = (ps[id] && ps[id].name) || "Someone"; } catch {}
+  }
+
+  ["#f-inst", "#f-why", "#f-state"].forEach((s) => $(s).addEventListener("change", renderQueue));
+  renderQueue();
+
+  (async () => {
+    try { [db, user] = await Promise.all([claude.use("db"), claude.use("user")]); } catch { db = null; }
+    if (user) { try { myId = await user.id(); } catch {} }
+    if (!db) { renderQueue(); return; }
+    db.collection("queue").onSnapshot((snap) => {
+      items = snap.docs.filter((s) => s.exists).map((s) => s.data())
+        .sort((a, b) => (a.why.includes("doubtful label") - b.why.includes("doubtful label")) || a.case_id.localeCompare(b.case_id));
+      if (!current && items.length) current = (filtered()[0] || items[0]).case_id;
+      renderQueue(); renderDetail();
+    }, () => { $("#queue").replaceChildren(el("li", "empty", "The queue could not be loaded. Reload the page.")); });
+    db.collection("decisions").onSnapshot(async (snap) => {
+      decisions = {};
+      for (const s of snap.docs) if (s.exists) decisions[s.id] = s.data();
+      await resolveNames();
+      renderQueue(); renderDetail();
+    });
+  })();
+})();
+</script>
