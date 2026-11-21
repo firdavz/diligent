@@ -3,7 +3,7 @@ data
 institutions/
 hackathon/
 *.zip
-eval/labels/
+# eval/labels/ — pushed by team decision (answer key is public)
 eval/drafts/
 # Secrets
 .env

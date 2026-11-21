@@ -61,8 +61,9 @@ Teammates: keep your own notes in a folder named after you, like this one.
 
 ## D9 — Nothing from development cases goes into `system/`
 - No case IDs, customer names, amounts, document IDs or verdicts in code or prompts (a competition rule).
-- Labels, drafts and the case viewer live in `eval/`, which `system/` never reads. Labels and the dataset are git-ignored
-  because this repo is public.
+- Labels, drafts and the case viewer live in `eval/`, which `system/` never reads. The dataset is git-ignored.
+  **Update (team decision):** the 226 hand labels are pushed to `eval/labels/` so everyone can score, accepting that the
+  answer key is public.
 
 ## D10 — Standard library only
 - Python 3 stdlib (`json`, `urllib.request`, `concurrent.futures`, `hashlib`, `re`, `dataclasses`). No `pip install`.
@@ -101,9 +102,51 @@ Teammates: keep your own notes in a folder named after you, like this one.
   reasoning (`reasoning: {"effort": "low"}` or `{"enabled": false}` — Fedya to test which the model accepts): cheaper and
   less run-to-run variation. Ask for `usage: {"include": true}` to log real cost per call.
 
+## D15 — Audit trail and reproducibility are first-class outputs
+- Judges care most about reproducibility and explainability, and about **following each institution's SOP**, not a
+  generic view of risk. So every decision now carries, in `system/traces/<institution>.jsonl`:
+  - per alert: its path through the rulebook (red flag / explained / partial / fallback / SOP invoice rule), the deciding
+    signals with their facts and evidence, and **the SOP clauses it rests on, quoted verbatim from that institution's
+    POLICY.md** (the rule that fired, the verdict definition, and any policy setting used: own accounts, internal list,
+    invoice rule, higher-risk countries);
+  - fingerprints: `input_fp` (everything the case may depend on), `policy_fp` (POLICY.md), `code_fp` (the system's own
+    source), `decision_fp` (the output row). Same input + policy + code ⇒ same decision_fp.
+- `system/traces/<institution>.manifest.json` per run: code/policy fingerprints, models, `output_fp` of the whole file,
+  verdict and path counts. Two runs are identical iff their `output_fp` match.
+- `python3 eval/audit.py <case_id>` prints one case's trail for the demo.
+- Verified: two back-to-back bank runs give the same `output_fp`.
+
+## D16 — Jev: real, but not on the endpoint the rules allow
+- `typesafe/jev-1.13` exists on OpenRouter but is a **decisions model**: it answers only on `/api/alpha/decisions`, not
+  `/api/v1/chat/completions` ("cannot be used with the chat/completions endpoint"). The rules allow models **only**
+  through the chat-completions endpoint. `typesafe/jev-router` is on chat completions but routes each request to a
+  different model with variable price, which breaks reproducibility.
+- So Jev stays out of `system/` unless the organisers confirm the decisions endpoint is allowed. Andrei is sending a paper
+  on it; revisit then.
+
+## D17 — Reader models: OpenAI without reasoning beats Grok on reproducibility (recommendation for Fedya)
+- Any OpenAI model via OpenRouter chat completions is allowed by the rules (unlike Jev, D16).
+- Test (21 Nov): one real yes/no question about a support chat, 5 identical calls per model, temperature 0, seed 7,
+  JSON output:
+
+  | Model | Identical outputs | Answer | Cost/call | Time |
+  |---|---|---|---|---|
+  | `openai/gpt-4o-mini-2024-07-18` (date-pinned) | 5/5 | yes | $0.00005 | 0.9s |
+  | `openai/gpt-4.1-mini` | 5/5 | yes | $0.00013 | 0.8s |
+  | `openai/gpt-4.1-nano` | 5/5 | yes | $0.00003 | 0.7s |
+  | `x-ai/grok-4.3` (reasoning low) | 2 distinct of 5 | yes | $0.00112 | 3.8s |
+
+- Grok reasons before answering, so its output text varies run to run; non-reasoning OpenAI models were byte-identical,
+  10–35× cheaper, 4× faster.
+- **Recommendation:** tier 1 `openai/gpt-4.1-mini` or the pinned `openai/gpt-4o-mini-2024-07-18` (a pinned snapshot can't
+  change before the judges' runs); tier 2 a larger non-reasoning OpenAI model (e.g. `openai/gpt-4.1`). Grok for the sponsor
+  story outside the scored path, or tier 2 only if a 5-run test shows it stable. The answer cache keeps repeat runs
+  identical whatever the model. `system/tm/reader.py` `TIER_MODELS` is Fedya's to change. Supersedes the model choice in D13.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
 - [ ] Is a pre-filled model cache acceptable? (D6)
+- [ ] Is OpenRouter's `/api/alpha/decisions` endpoint (Jev) allowed? Ask Ahmad (D16).
 - [ ] Owners for A/B/C/D (see `TEAM.md`).
 - [ ] Measure real tier-1/tier-2 cost and latency on 20 cases; set the tier-2 cap (D13).
