@@ -681,4 +681,4 @@ def contradictory_stories(b: CaseBundle) -> Checks:
 # Order matters: when several checks fire, the first signal's code becomes the case's reason code, so the most specific go first.
 CHECKS: list = [listed_party, fraud_report, structuring_intent, evasive_routing, invoice_mismatch, linked_new_company,
                 shared_payee_addresses, dissolved_counterparty, corridor_to_individuals, forwarded_to_exchange, third_party_story,
-                contradictory_stories, weekday_conflicts, undisclosed_related_payee]
+                contradictory_stories, weekday_conflicts]  # undisclosed_related_payee: off (16:52), see its docstring

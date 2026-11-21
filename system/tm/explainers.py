@@ -649,6 +649,10 @@ def _describe(t: dict, verb_in: str, verb_out: str) -> str:
     return f"the {money(t['amount_gbp'])} {what} on {fmt_date(d) if d else '?'} ({t['transaction_id']})"
 
 
+# Off (Lorenzo, 16:52): bank and e-money land exactly on 500/250/250, so these 2 ISA refunds most likely close.
+UNPROVEN_REFUND_ACCOUNT = False
+
+
 def refund(b: CaseBundle) -> Checks:
     """Money that is the return of an earlier payment: a transaction going the other way for the same amount with the
     same party (cash: withdrawal then deposit), confirmed by a document written between the two (venue email, credit
@@ -677,7 +681,7 @@ def refund(b: CaseBundle) -> Checks:
             # A cancellation that sends the money to a named account without saying it is the customer's (and no
             # statement showing it is): the refund story holds, but where the money went is unproven -> RFI.
             acct = re.search(r"\d{2}-\d{2}-\d{2}\s?\d{6,8}", doc.text)
-            if (_kind(doc, "cancellation") and acct and not re.search(r"in your name", doc.text, re.I)
+            if (UNPROVEN_REFUND_ACCOUNT and _kind(doc, "cancellation") and acct and not re.search(r"in your name", doc.text, re.I)
                     and not _statement_for(b, t if t.get("direction") == "out" else e)):
                 unproven.append((t, doc, acct[0]))
                 continue
