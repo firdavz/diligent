@@ -1,0 +1,16 @@
+{
+  "description": "Streams, checks, scores and reproducibility, built by eval/board.py from the team branch and the 226 hand labels.",
+  "schedule": "Rebuilt by Claude every 20 minutes until 16:45 from the track1-alert-closing branch",
+  "source": {
+    "format": "json",
+    "kind": "file",
+    "name": "board.json",
+    "url": "/_blob/fb1713f26c9bca67d8d08ec9eca7f16d"
+  },
+  "staleAfterHours": 1,
+  "title": "Team board snapshot",
+  "updated": {
+    "at": "2026-11-21T12:53:00Z",
+    "by": "eval/board.py (Claude, for Andrei)"
+  }
+}
