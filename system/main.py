@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from tm.audit import annotate, code_fp, fp  # noqa: E402
 from tm.check import check  # noqa: E402
 from tm.load import load_institution  # noqa: E402
 from tm.pipeline import run_case  # noqa: E402
@@ -30,7 +31,9 @@ def _safe(b):
             evidence=[t for a in b.alerts for t in a.get("transaction_ids", [])][:3],
             trace={"error": repr(e)},
         )
-    return d, check(d, b)
+    problems = check(d, b)
+    annotate(b, d)
+    return d, problems
 
 
 def main(argv: list[str]) -> int:
@@ -57,11 +60,26 @@ def main(argv: list[str]) -> int:
             f.write(json.dumps({**d.output_row(), "trace": d.trace, "problems": problems},
                                ensure_ascii=False, default=str) + "\n")
 
+    from tm import reader
+    manifest = {
+        "institution": inst,
+        "cases": len(results),
+        "code_fp": code_fp(),
+        "policy_fp": fp(bundles[0].policy.get("text", "")) if bundles else None,
+        "models": reader.TIER_MODELS if reader.enabled() else "rules only (no OPENROUTER_API_KEY)",
+        "output_fp": fp(open(out, encoding="utf-8").read()),
+        "verdicts": dict(sorted(Counter(d.verdict for d, _ in results).items())),
+        "paths": dict(sorted(Counter(a["path"] for d, _ in results for a in d.trace.get("alerts", [])).items())),
+    }
+    with open(os.path.join(trace_dir, f"{inst}.manifest.json"), "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
     problems = [p for _, ps in results for p in ps]
     errors = sum(1 for d, _ in results if "error" in d.trace)
     verdicts = Counter(d.verdict for d, _ in results)
     print(f"{inst}: {len(results)} cases in {time.time() - t0:.1f}s  {dict(verdicts)}  "
-          f"errors={errors} problems={len(problems)}", file=sys.stderr)
+          f"errors={errors} problems={len(problems)}  output_fp={manifest['output_fp']} code_fp={manifest['code_fp']}",
+          file=sys.stderr)
     for p in problems[:10]:
         print("  " + p, file=sys.stderr)
     return 0

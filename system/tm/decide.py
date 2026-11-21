@@ -150,7 +150,10 @@ def decide(b: CaseBundle, signals: list[Signal], answers: list[dict] | None = No
         evidence=evidence,
         trace={
             "alerts": [{**{k: v for k, v in p.items() if k != "deciding"},
-                        "deciding": [s.source or s.code for s in p["deciding"]]} for p in per_alert],
+                        "deciding": [s.source or s.code for s in p["deciding"]],
+                        "codes": [s.code for s in p["deciding"]],
+                        "facts": [s.facts for s in p["deciding"]],
+                        "evidence": [e for s in p["deciding"] for e in s.evidence]} for p in per_alert],
             "signals": [vars(s) for s in signals],
             "answers": answers or [],
         },
