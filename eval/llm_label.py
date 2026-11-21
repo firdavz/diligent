@@ -55,8 +55,14 @@ The SOP is the source of truth: when your instinct and a clause disagree, the cl
 
 METHOD (follow it in this order)
 1. For every alert, find the SOP clause that governs it and the rule's own limits (use the numbers in the SOP, never your own).
-2. Money: does a document explain the activity? Match amount to the penny, payer/payee, and date order (a document dated after the
-   activity it is meant to explain does not explain it). Sum parts when a document gives a breakdown (sale price less mortgage and fees).
+2. Money: does a document explain the activity? Match amount to the penny, payer/payee, and dates. Date order matters for documents
+   that set up or justify a payment (an invoice, contract, gift letter, instruction): one written after the payment looks made to fit.
+   It does NOT apply to records of what happened (a bank statement, takings book, collection report, register extract): those are
+   naturally dated after the activity they record, and the SOP accepts them. Sum parts when a document gives a breakdown.
+   Repeated amounts under a threshold are structuring only when nothing explains them; business records that reconcile to each
+   deposit explain them, unless something on file shows intent to stay under the limit.
+   A rule about releasing a held payment (e.g. an invoice needed for £10,000+) applies to the case's HELD payment only, not to
+   other payments in the history; a case without a held payment is about the money that came in.
 3. People: names, birth dates and addresses against the internal list; the counterparty's officers and controllers on the registers
    (resigned as director is not the same as no longer in control; check every date against the payment date).
 4. Profile: declared income / volume and channels; multiples (e.g. own-account transfers at 5 times declared income or more go to RFI).
@@ -165,7 +171,7 @@ def pick(a, bs) -> list[str]:
             if cid not in labelled:
                 by.setdefault(shape(bs[cid]), []).append(cid)
         return [cid for k in sorted(by) for cid in by[k][:n]]
-    return a.ids.split(",")
+    return [x.strip() for x in a.ids.split(",") if x.strip()]
 
 
 def main():
@@ -214,8 +220,9 @@ def main():
     with ThreadPoolExecutor(a.workers) as pool:
         rows = list(pool.map(one, ids))
     out = os.path.join(ROOT, "eval", "drafts", "llm", f"{a.inst}.{tag}.jsonl")
-    with open(out, "w", encoding="utf-8") as f:
-        for r in rows:
+    every = {r["case_id"]: r for r in (json.load(open(os.path.join(cache, n), encoding="utf-8")) for n in sorted(os.listdir(cache)))}
+    with open(out, "w", encoding="utf-8") as f:  # every answer in the cache, not only this run's
+        for r in every.values():
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     bad = [r["case_id"] for r in rows if r.get("error") or not r.get("valid")]
     total = sum(r.get("cost", 0) for r in rows)

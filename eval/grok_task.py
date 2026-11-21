@@ -6,6 +6,7 @@ python3 eval/grok_task.py make [--all | --per-shape 2]   -> eval/drafts/grok_tas
     policy/<inst>.md   each institution's POLICY.md
     cases/<inst>/<case_id>.txt   one case rendered as plain text (--all: every development case; default: 2 unlabelled per shape)
     out/<inst>/        where the agent writes one <case_id>.json per case
+python3 eval/grok_task.py readme   -> rewrite README.md only (keeps the answers already in out/)
 python3 eval/grok_task.py collect  -> eval/drafts/llm/<inst>.grok-bot.jsonl
 then: python3 eval/disagreements.py <inst> --llm grok-bot   (disagreements ranked by how bad they would be)
 
@@ -129,6 +130,9 @@ def collect() -> None:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "readme":  # refresh the instructions only; keeps cases/ and out/
+        open(os.path.join(TASK, "README.md"), "w", encoding="utf-8").write(readme())
+        sys.exit("README.md rewritten")
     if len(sys.argv) < 2 or sys.argv[1] not in ("make", "collect"):
         sys.exit(__doc__)
     if sys.argv[1] == "make":
