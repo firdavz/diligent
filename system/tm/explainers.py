@@ -20,7 +20,7 @@ import re
 from datetime import date
 
 from .types import CaseBundle, Doc, Question, Signal
-from .util import amounts, fmt_date, money, norm, parse_date, same_name
+from .util import amounts, fmt_date, money, name_key, norm, parse_date, same_name
 
 Checks = tuple[list[Signal], list[Question]]
 
@@ -250,6 +250,12 @@ def _own_covers(b: CaseBundle, a: dict, txns: list[dict], own: dict[str, Doc]) -
         return bool(limit) and sum(t["amount_gbp"] for t in rest) < limit
     if rule == "TM05":  # every alerted cash deposit is explained
         return not [t for t in rest if _is_cash_in(t)]
+    if rule == "TM03":  # payments just under a threshold (the structuring rule): every one must be explained
+        return not rest
+    if rule == "TM04":  # many parties: the distinct parties left unexplained are within the limit
+        limit = m.get("limit")
+        parties = {name_key(_party(t.get("counterparty_name"))) for t in rest if t.get("counterparty_name")}
+        return limit is not None and len(parties) <= limit
     return False
 
 
@@ -647,8 +653,122 @@ def refund(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- INVOICE_MATCHES
+
+# An invoice or contract is paid on or after its date; a business's own sales invoices may be issued a few days after
+# the money for them arrives, so receipts get a short grace when the row carries the transaction's reference number.
+INVOICE_MAX_DAYS_BEFORE = 90
+INVOICE_RECEIPT_GRACE_DAYS = 7
+_INVOICE_DOC_KINDS = ("invoice", "contract", "schedule", "agreement", "order", "payment_file")
+_NOT_INVOICE_DOC_KINDS = ("factoring", "employment")
+
+
+def _is_invoice_doc(doc: Doc) -> bool:
+    kind = (doc.type or "").lower()
+    return any(k in kind for k in _INVOICE_DOC_KINDS) and not any(k in kind for k in _NOT_INVOICE_DOC_KINDS)
+
+
+def _invoice_contradicts(b: CaseBundle, doc: Doc, t: dict) -> bool:
+    """The document names a different buyer/borrower than the customer, or a different account to pay."""
+    customer = b.customer.get("name")
+    for k in ("buyer", "customer", "borrower", "bill to"):
+        v = doc.fields.get(k)
+        if v and not same_name(v.split(",")[0], customer):
+            return True
+    pay_to = doc.fields.get("pay to") or ""
+    if len(_digits(pay_to)) >= 4 and t.get("counterparty_account") and not _same_account(pay_to, t["counterparty_account"]):
+        return True
+    return False
+
+
+def _units(doc: Doc) -> list[tuple[str, date | None]]:
+    """What can match one transaction: each table row (with its own date if it has one), then the whole document."""
+    out = []
+    for rows in _tables(doc):
+        for r in rows:
+            text = " | ".join(r.values())
+            out.append((text, next((d for d in (parse_date(v) for v in r.values()) if d), None)))
+    out.append((doc.text, None))
+    return out
+
+
+def _invoice_unit_for(b: CaseBundle, t: dict, used: set[tuple[str, int]]) -> tuple[Doc, int] | None:
+    """A document (or one of its table rows) that matches t on amount, party, reference number and date."""
+    td = _txn_date(t)
+    party = _party(t.get("counterparty_name"))
+    if not td or not party or same_name(party, b.customer.get("name")):
+        return None
+    refs = re.findall(r"\d{3,}", t.get("reference") or "")
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        if not _is_invoice_doc(doc) or _invoice_contradicts(b, doc, t):
+            continue
+        header = f"{doc.title}\n" + "\n".join(doc.fields.values())
+        for i, (text, row_date) in enumerate(_units(doc)):
+            if (doc.doc_id, i) in used or not any(_same_amount(x, t["amount_gbp"]) for x in amounts(text)):
+                continue
+            if not (_mentioned(party, text) or _mentioned(party, header)):
+                continue
+            if any(r not in text and r not in doc.text and r not in header for r in refs):
+                continue
+            ud = row_date or _doc_date(doc)
+            if not ud:
+                continue
+            gap = (td - ud).days
+            grace = INVOICE_RECEIPT_GRACE_DAYS if t.get("direction") == "in" and refs and all(r in text for r in refs) else 0
+            if -grace <= gap <= INVOICE_MAX_DAYS_BEFORE:
+                return doc, i
+    return None
+
+
+def invoice_matches(b: CaseBundle) -> Checks:
+    """Payments matched to the invoices, contracts and schedules behind them: an invoice / contract / schedule row /
+    payment-file row with the same amount, naming the counterparty, carrying the transaction's reference number,
+    dated on or before the payment, and not naming another buyer or account. Also the money in that such a document
+    accounts for (a loan agreement's principal, the business's own freight invoices). The alert is explained when,
+    without the matched transactions, it would not have fired."""
+    signals: list[Signal] = []
+    for a in b.alerts:
+        if a.get("rule_id") not in ("TM01", "TM02", "TM03", "TM04", "TM06", "TM08"):
+            continue
+        txns = b.alert_txns(a)
+        used: set[tuple[str, int]] = set()
+        found: dict[str, Doc] = {}
+        for t in sorted(txns, key=lambda t: (t.get("booked_at", ""), t["transaction_id"])):
+            hit = _invoice_unit_for(b, t, used)
+            if hit:
+                doc, i = hit
+                if i < len(_units(doc)) - 1:  # a table row is used once; a whole document may back several rows
+                    used.add((doc.doc_id, i))
+                found[t["transaction_id"]] = doc
+        if not found or not _own_covers(b, a, txns, found):
+            continue
+        matched = [t for t in txns if t["transaction_id"] in found]
+        docs = list({found[t["transaction_id"]].doc_id: found[t["transaction_id"]] for t in matched}.values())
+        if len(matched) <= 3:
+            facts = "; ".join(
+                f"{found[t['transaction_id']].doc_id} ({found[t['transaction_id']].title}) matches the "
+                f"{money(t['amount_gbp'])} {'paid to' if t.get('direction') == 'out' else 'received from'} "
+                f"{_party(t.get('counterparty_name'))} on {fmt_date(_txn_date(t))} ({t['transaction_id']})"
+                for t in matched) + " on amount, party and reference."
+        else:
+            parties = {name_key(_party(t.get("counterparty_name"))) for t in matched}
+            facts = (f"{' and '.join(d.doc_id + ' (' + d.title + ')' for d in docs)} "
+                     f"list{'s' if len(docs) == 1 else ''} each of the {len(matched)} alerted payments to "
+                     f"{len(parties)} {'party' if len(parties) == 1 else 'parties'} with the same amount "
+                     f"({money(sum(t['amount_gbp'] for t in matched))} in all).")
+        held = b.case.get("held_payment_id")
+        ids = sorted(found)
+        shown = ([held] if held in found else []) + [i for i in ids if i != held][:8]
+        signals.append(Signal(
+            alert_id=a["alert_id"], kind="explains", code="INVOICE_MATCHES", facts=facts,
+            evidence=list(dict.fromkeys([d.doc_id for d in docs] + shown)), strength="hard",
+            source="explainers.invoice_matches",
+        ))
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Next: invoice_matches (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
+# Next: third_party_documented (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
 # third_party_documented, own account on payments and FX (outgoing own-account transfer; needs a team decision).
 # list_match_different_party is Lorenzo's (red_flags.listed_party).
-CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund]
+CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches]

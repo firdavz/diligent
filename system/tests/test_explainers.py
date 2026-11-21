@@ -474,5 +474,106 @@ class Refund(unittest.TestCase):
                                          policy=all_money), [])
 
 
+class InvoiceMatches(unittest.TestCase):
+    PAY = txn("T1", "10-05", "out", 10250.47, "Testcastle Medical Center", "account ending 1986", "PATIENT ROBIN EXAMPLE",
+              channel="swift", country="Lebanon")
+    TM06 = {"alert_id": "A1", "rule_id": "TM06", "transaction_ids": ["T1"], "measured": {"limit_gbp": 5000}}
+
+    def invoice(self, extra="", dated="2026-10-03", amount="£10,250.47", title="Invoice from Testcastle Medical Center",
+                dtype="hospital_invoice"):
+        return dated_doc("INV-1", dtype, f"**Patient:** Robin Example\n**Amount due:** {amount}\n"
+                                          f"**Pay to:** Testcastle Medical Center\n{extra}", dated, title)
+
+    def run_inv(self, alerts, docs, txns, held=None):
+        from tm.explainers import invoice_matches
+        b = own_bundle(alerts, docs, txns)
+        if held:
+            b.case["held_payment_id"] = held
+        return invoice_matches(b)[0]
+
+    def codes(self, alerts, docs, txns):
+        return [(s.kind, s.code) for s in self.run_inv(alerts, docs, txns)]
+
+    def test_hospital_invoice_matching_amount_and_payee_closes(self):
+        self.assertEqual(self.codes([self.TM06], [self.invoice()], [self.PAY]), [("explains", "INVOICE_MATCHES")])
+
+    def test_invoice_dated_after_the_payment_explains_nothing(self):
+        self.assertEqual(self.codes([self.TM06], [self.invoice(dated="2026-10-07")], [self.PAY]), [])
+
+    def test_invoice_amount_differs_explains_nothing(self):
+        self.assertEqual(self.codes([self.TM06], [self.invoice(amount="£10,520.47")], [self.PAY]), [])
+
+    def test_invoice_from_another_payee_explains_nothing(self):
+        other = dated_doc("INV-1", "hospital_invoice", "**Amount due:** £10,250.47\n**Pay to:** Other Clinic",
+                          "2026-10-03", "Invoice from Other Clinic")
+        self.assertEqual(self.codes([self.TM06], [other], [self.PAY]), [])
+
+    def test_reference_number_not_on_the_invoice_explains_nothing(self):
+        pay = {**self.PAY, "reference": "INV 50123"}
+        self.assertEqual(self.codes([self.TM06], [self.invoice("**Invoice:** INV 50999")], [pay]), [])
+
+    def test_other_buyer_or_other_account_explains_nothing(self):
+        self.assertEqual(self.codes([self.TM06], [self.invoice("**Buyer:** Someone Else Ltd")], [self.PAY]), [])
+        pay = {**self.PAY, "counterparty_account": "account ending 7777"}
+        acct = dated_doc("INV-1", "supplier_invoice", "**Amount:** £10,250.47\n**Pay to:** account ending 1986",
+                         "2026-10-03", "Invoice from Testcastle Medical Center")
+        self.assertEqual(self.codes([self.TM06], [acct], [pay]), [])
+
+    def test_factoring_and_employment_documents_are_not_invoices(self):
+        for dtype in ("factoring_agreement", "employment_contract", "insurer_letter"):
+            self.assertEqual(self.codes([self.TM06], [self.invoice(dtype=dtype)], [self.PAY]), [], dtype)
+
+    def test_financed_car_needs_both_the_loan_agreement_and_the_dealer_invoice(self):
+        loan = txn("T1", "09-19", "in", 23000.0, "Testfin Finance Ltd", "52-28-61 17163589", "LOAN ADVANCE")
+        car = txn("T2", "09-20", "out", 24900.0, "Testtown Motors Ltd", "77-65-33 86174645", "INV 72911")
+        agreement = dated_doc("LOA-1", "loan_agreement", "**Borrower:** Pat Example\n**Lender:** Testfin Finance Ltd\n"
+                              "**Principal Amount:** £23,000.00", "2026-09-16", "Loan agreement with Testfin Finance Ltd")
+        dealer = dated_doc("INV-2", "dealer_invoice", "**Customer:** Pat Example\n**Price:** £24,900.00",
+                           "2026-09-19", "Invoice INV 72911 from Testtown Motors Ltd")
+        alert = {"alert_id": "A1", "rule_id": "TM02", "transaction_ids": ["T1", "T2"], "measured": {}}
+        self.assertEqual(self.codes([alert], [agreement, dealer], [loan, car]), [("explains", "INVOICE_MATCHES")])
+        self.assertEqual(self.codes([alert], [dealer], [loan, car]), [])  # the loan advance stays unexplained
+
+    def test_stage_payments_each_on_their_schedule_row(self):
+        stages = [txn(f"T{i}", f"10-{6 + 3 * i:02d}", "out", amt, "Testmore Arredamenti Srl", "IBAN ending 9186",
+                      f"PROJECT STAGE {i}", channel="swift", country="Italy")
+                  for i, amt in enumerate([9269.70, 9101.27, 9431.90, 9188.78], start=1)]
+        rows = "\n".join(f"| {i} | Work | {6 + 3 * i} October 2026 | £{t['amount_gbp']:,.2f} |" for i, t in enumerate(stages, 1))
+        schedule = dated_doc("CON-1", "contract_schedule", "**Supplier:** Testmore Arredamenti Srl\n\n"
+                             "| Stage | Work | Due | Amount |\n|---|---|---|---|\n" + rows, "2026-09-01",
+                             "Payment schedule, contract with Testmore Arredamenti Srl")
+        alert = {"alert_id": "A1", "rule_id": "TM03", "transaction_ids": [t["transaction_id"] for t in stages],
+                 "measured": {"limit_count": 2}}
+        s = self.run_inv([alert], [schedule], stages, held="T4")
+        self.assertEqual([x.code for x in s], ["INVOICE_MATCHES"])
+        self.assertEqual(s[0].evidence[:2], ["CON-1", "T4"])  # the held payment is cited first
+        short = dated_doc("CON-1", "contract_schedule", schedule.text.rsplit("\n", 1)[0], "2026-09-01", schedule.title)
+        self.assertEqual(self.run_inv([alert], [short], stages), [])  # one stage without a row: TM03 not explained
+
+    def test_payment_file_covers_the_contractors_and_leaves_few_other_parties(self):
+        fees = [txn(f"T{i}", "09-20", "out", 900.0 + i, f"Contractor Name{chr(65 + i)}", f"IBAN ending {1000 + i}",
+                    "MONTHLY FEE", channel="swift") for i in range(6)]
+        supplier = txn("T9", "09-15", "out", 90000.0, "Big Supplier Co", "IBAN ending 3180", "INV 84609", channel="swift")
+        rows = "\n".join(f"| {t['counterparty_name']} | Poland | C-{i} | £{t['amount_gbp']:,.2f} |" for i, t in enumerate(fees))
+        pfile = dated_doc("PAY-1", "payment_file", "| Contractor | Country | Contract | Amount |\n|---|---|---|---|\n" + rows,
+                          "2026-09-19", "Contractor payment file")
+        alert = {"alert_id": "A1", "rule_id": "TM04", "transaction_ids": [t["transaction_id"] for t in fees + [supplier]],
+                 "measured": {"distinct_counterparties": 7, "limit": 3}}
+        self.assertEqual(self.codes([alert], [pfile], fees + [supplier]), [("explains", "INVOICE_MATCHES")])
+        few = dated_doc("PAY-1", "payment_file", "| Contractor | Country | Contract | Amount |\n|---|---|---|---|\n"
+                        + "\n".join(rows.splitlines()[:2]), "2026-09-19", "Contractor payment file")
+        self.assertEqual(self.codes([alert], [few], fees + [supplier]), [])  # 5 parties left > limit 3
+
+    def test_own_freight_invoices_may_be_issued_after_the_receipt_when_the_reference_matches(self):
+        rec = txn("T1", "10-11", "in", 12216.28, "Testcote Exports Ltd", "35-30-06 29236070", "FREIGHT 10102")
+        inv = dated_doc("INV-3", "freight_invoices", "| Invoice | Exporter | Amount |\n|---|---|---|\n"
+                        "| FREIGHT 10102 | Testcote Exports Ltd | £12,216.28 |", "2026-10-13",
+                        "Freight invoices issued by Pat Example")
+        alert = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1"], "measured": {"limit_gbp": 1000}}
+        self.assertEqual(self.codes([alert], [inv], [rec]), [("explains", "INVOICE_MATCHES")])
+        late = dated_doc("INV-3", "freight_invoices", inv.text, "2026-10-25", inv.title)
+        self.assertEqual(self.codes([alert], [late], [rec]), [])  # beyond the grace
+
+
 if __name__ == "__main__":
     unittest.main()
