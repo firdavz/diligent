@@ -275,6 +275,24 @@ Teammates: keep your own notes in a folder named after you, like this one.
   goes to the review desk. Silver labels live in `eval/labels_model/` and are scored separately from the human labels.
 - New cases: 2 per case shape running now (~250), then 3 more per shape (~375). Free tier, cached.
 
+## D25 — BinEval works: 40/40 verdicts after one improvement loop; system scored on 214 new model-labelled cases
+- **BinEval** (`eval/bineval.py`, SOP-quoted atomic questions per institution and per alert, one decisions request per
+  case, fixed table), on 40 labelled cases:
+
+  | | Verdict | Code | Wrongful closes |
+  |---|---|---|---|
+  | Holistic labeller (verdict + code questions) | 38/40 | 32/40 | 0 |
+  | BinEval iteration 1 | 35/40 | 28/40 | 1 |
+  | **BinEval iteration 2** (fixes aimed at the question behind each miss) | **40/40** | **37/40** | **0** |
+
+  Iteration-2 fixes: a list alert closes only if `l_diff` is yes (SOP wording); `l_same` checks the PSC "Ceased" date;
+  narrower `r_passthrough`; new `r_mule`, `r_early_redemption`, `rfi_ask`; no "dated before" requirement for records and
+  invoices; own account closes on the own-account clause. Tuned on these 40, so validation on 40 other labelled cases is
+  running (see below).
+- **New cases (silver test):** pplx labelled 245 unseen development cases (2 per shape). Scoring our system (rules only)
+  on the 214 with confidence ≥ 0.7: right 166/214, **no possible wrongful closes**, cost saved bank 82%, e-money 80%,
+  investment 76%, **payments and FX 32%**. Payments and FX is the gap again.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
