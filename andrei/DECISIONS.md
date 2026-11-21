@@ -219,6 +219,27 @@ Teammates: keep your own notes in a folder named after you, like this one.
   with a pinned decision model, and let a fixed rulebook decide: reproducible and audit-ready down to the clause."
 - **Verified 21 Nov:** 5 runs × 4 institutions (4,000 cases) → the same output fingerprint every time.
 
+## D22 — Model bake-off on labelled cases: pplx-decider wins on accuracy, Jev on byte-identical output
+- `eval/model_bakeoff.py`: one SOP yes/no question per case ("does the evidence on file explain all the activity the
+  alerts raised, so the case can close?"), 40 labelled cases (10 per institution, half closable), each asked twice.
+  The model sees the case file and the institution's POLICY.md, never our label. Total cost ~$0.07.
+
+  | Model | Best threshold | Right | Wrongful closes | Closable closed | Verdict flips between runs | Cost (80 calls) |
+  |---|---|---|---|---|---|---|
+  | `perplexity/pplx-decider-v1.3:free` | ≥ 0.7 | **40/40** | **0** | **20/20** | 0 (probabilities drift in the 3rd decimal) | $0 |
+  | `typesafe/jev-1.13` | ≥ 0.5 | 33/40 | 0 | 13/20 | 0 (identical to 2 dp on 17/40) | $0.014 |
+  | `openai/gpt-4.1-mini` (chat) | ≥ 0.9 | 32/40 | **7** | 19/20 | 2 dp identical 38/40 | $0.055 |
+
+- Jev is cautious: it never says ≥ 0.9 on this holistic question, but separates the classes (closable 0.5–0.89, not
+  closable ≈ 0.09). OpenAI says "yes" too easily, the expensive mistake. pplx-decider is accurate and stable after a
+  threshold.
+- `perplexity/pplx-decider-v1.1-27b` returns "No endpoints found" on OpenRouter, paid and free.
+- **Recommendation for Fedya:** a question the model answers goes to pplx-decider v1.3, with Jev as the fallback when the
+  free tier is rate-limited or down; round to 2 dp, cache, threshold in code (≥ 0.7 yes, ≤ 0.3 no, else unknown).
+  Caveats: 40 cases only; one holistic question, where the design is atomic questions (BinEval, D21), so re-test on those;
+  the `:free` tier may be rate-limited when the judges run 800 cases × 5. Keep cache plus fallback so a refusal can
+  never stop a run. Data: `eval/drafts/bakeoff.json`.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.

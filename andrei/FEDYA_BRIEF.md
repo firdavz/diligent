@@ -8,6 +8,8 @@ Answer typed questions about a case's documents with **Jev 1.13** on OpenRouter'
 and hand back an `Answer` per question. **Never pick a verdict**: the rulebook (`system/tm/decide.py`) does that.
 
 ## Already decided (don't re-litigate, see `andrei/DECISIONS.md`)
+- **D22 (newest):** a bake-off on 40 labelled cases put `perplexity/pplx-decider-v1.3:free` first (40/40, no wrongful closes),
+  Jev 1.13 second (33/40, cautious), OpenAI last (7 wrongful closes). Use pplx-decider first, Jev as fallback.
 - **D18:** decision models are allowed (organisers confirmed). Tier 1 = `typesafe/jev-1.13`.
 - **D17:** tier 2 = a non-reasoning OpenAI model on chat completions (`openai/gpt-4.1-mini` or the pinned
   `openai/gpt-4o-mini-2024-07-18`), only for what Jev leaves unknown.
