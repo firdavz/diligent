@@ -79,3 +79,24 @@ system/run data/institutions/bank output/bank.jsonl && python3 eval/score.py ban
 - [ ] Then the demo screen and video (from 15:30)
 
 Commit and push as you go (root `CLAUDE.md`): small commits on `track1-alert-closing`.
+
+## Addendum (14:00): wire the BinEval SOP questions into the reader
+Decision D21 (BinEval) and the bake-offs D22–D24 say: ask the SOP's **atomic yes/no questions** and let a fixed table
+decide. `eval/bineval.py` is the working prototype; your job is to make it part of the system, not to rewrite it.
+
+1. **Move the question bank into `system/`** (e.g. `system/tm/sop_questions.py`): `QUESTIONS`, `_clause`,
+   `build_questions(policy_text, alerts)` and the table `decide(ans, bundle)`. Standard library only; no import from
+   `eval/` (the system may not read `eval/`).
+2. **One decisions request per case** with every question (the endpoint takes many). Model order:
+   `perplexity/pplx-decider-v1.3:free`, then `typesafe/jev-1.13` if it fails (D23). Cache by
+   hash(question-bank version, request body), like your reader cache.
+3. **How it joins the rulebook:** the answers become `Signal`s, never a verdict on their own:
+   - a red-flag question answered yes (≥ 0.7) → `red_flag` signal with that row's ESC code, **strength "soft"**;
+   - the explanation questions all yes → `explains` signal with the code from `e_kind`, **strength "soft"**;
+   - the 5× own-account rule stays in code (`decide` already does this).
+   `decide.py` will not CLOSE on soft signals alone, so the model can only escalate, ask (RFI) or **support** a close
+   that code has verified. That keeps wrongful closes at 0. (Andrei may relax this per check later, measured on labels.)
+4. **Audit trail:** put every question, its probability and the clause it quotes into the trace, so `eval/audit.py`
+   and the Decision Audit Trail viewer show them.
+5. **Check:** `python3 eval/bineval.py 10` for the prototype's numbers; after wiring, run and score all four
+   institutions. Wrongful closes must stay 0, and two runs must give the same `output_fp`.
