@@ -1,0 +1,9 @@
+{"case_id": "IV-CS999591", "verdict": "RFI", "reason_code": "RFI_PURPOSE_DOCUMENTS", "p_verdict": 0.48146791740517164, "p_code": 0.41958945545404447, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "IV-CS999303", "verdict": "CLOSE", "reason_code": "OWN_ACCOUNT", "p_verdict": 0.9664692469464919, "p_code": 0.9080719310718752, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "IV-CS997203", "verdict": "CLOSE", "reason_code": "REFUND_OF_EARLIER_PAYMENT", "p_verdict": 0.9288181819376123, "p_code": 0.889305222371466, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "IV-CS997137", "verdict": "ESCALATE", "reason_code": "ESC_MULE_ACTIVITY", "p_verdict": 0.9922390017974285, "p_code": 0.5098613953794173, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "IV-CS997065", "verdict": "ESCALATE", "reason_code": "ESC_MULE_ACTIVITY", "p_verdict": 0.9883641403281215, "p_code": 0.5270758884798062, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "IV-CS996352", "verdict": "CLOSE", "reason_code": "OWN_ACCOUNT", "p_verdict": 0.9225697386586903, "p_code": 0.9607212710667317, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "IV-CS996326", "verdict": "ESCALATE", "reason_code": "ESC_LISTED_PARTY", "p_verdict": 0.981116819449894, "p_code": 0.9936130549477726, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "IV-CS996159", "verdict": "CLOSE", "reason_code": "OWN_ACCOUNT", "p_verdict": 0.6562336717510479, "p_code": 0.8683793048956423, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "IV-CS995112", "verdict": "RFI", "reason_code": "RFI_PURPOSE_DOCUMENTS", "p_verdict": 0.5690225938496993, "p_code": 0.503447396586708, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}

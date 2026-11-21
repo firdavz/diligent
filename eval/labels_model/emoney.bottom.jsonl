@@ -1,0 +1,9 @@
+{"case_id": "EM-CS999453", "verdict": "RFI", "reason_code": "RFI_PURPOSE_DOCUMENTS", "p_verdict": 0.8659144498119307, "p_code": 0.7591082024012035, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "EM-CS997860", "verdict": "CLOSE", "reason_code": "OWN_ACCOUNT", "p_verdict": 0.931446270776553, "p_code": 0.9963942021509204, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "EM-CS992374", "verdict": "CLOSE", "reason_code": "INVOICE_MATCHES", "p_verdict": 0.9605757253294398, "p_code": 0.9943347159453837, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "EM-CS992154", "verdict": "ESCALATE", "reason_code": "ESC_MULE_ACTIVITY", "p_verdict": 0.988930186585644, "p_code": 0.7712523936383653, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "EM-CS991377", "verdict": "RFI", "reason_code": "RFI_PURPOSE_DOCUMENTS", "p_verdict": 0.7284273445743638, "p_code": 0.7308251879016291, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "EM-CS989474", "verdict": "CLOSE", "reason_code": "OWN_ACCOUNT", "p_verdict": 0.730557619361688, "p_code": 0.887812497430211, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "EM-CS987645", "verdict": "ESCALATE", "reason_code": "ESC_MULE_ACTIVITY", "p_verdict": 0.9735418877706734, "p_code": 0.6474904880623397, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "EM-CS987130", "verdict": "RFI", "reason_code": "RFI_COUNTERPARTY_DETAILS", "p_verdict": 0.9906141609248946, "p_code": 0.9936623784135442, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
+{"case_id": "EM-CS986331", "verdict": "ESCALATE", "reason_code": "ESC_STRUCTURING", "p_verdict": 0.9981261982645488, "p_code": 0.9672490073051745, "source": "pplx-decider", "model": "perplexity/pplx-decider-v1.3:free"}
