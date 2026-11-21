@@ -1,5 +1,5 @@
 # Dataset and anything derived from it — participants only, never in a public repo
-data/
+data
 institutions/
 hackathon/
 *.zip
@@ -13,3 +13,5 @@ system/cache/
 __pycache__/
 *.pyc
 .DS_Store
+system/traces/
+output/*.run*.jsonl
