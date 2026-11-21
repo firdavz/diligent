@@ -304,6 +304,21 @@ Teammates: keep your own notes in a folder named after you, like this one.
 - Not tuned further on this set: tuning on the validation cases would make them a training set too. Any further fix
   needs a fresh held-out set (the 40 human-labelled desk cases are reserved for that).
 
+## D27 — Silver test on 514 unseen cases: 78% of escalate-all cost saved, 0 wrongful closes
+- pplx-decider labelled 591 unlabelled development cases (up to 5 per case shape, `eval/pplx_label.py ... new 5`).
+  514 have verdict confidence ≥ 0.7 (D24). Our system now (rules only, latest team code), scored against them:
+
+  | Institution | Confident labels | System right | Cost saved | Closable closed | Possible wrongful closes |
+  |---|---|---|---|---|---|
+  | bank | 146 of 151 | 135/146 | 90% | 69/75 | 0  |
+  | emoney | 132 of 140 | 117/132 | 86% | 61/66 | 0  |
+  | investment | 122 of 156 | 95/122 | 73% | 58/75 | 0  |
+  | payments_fx | 114 of 144 | 81/114 | 61% | 37/62 | 0  |
+  | **all** | 514 | 428/514 | 78% | | 0 |
+
+- **No possible wrongful closes on 514 unseen cases.** Payments and FX has risen from 32% to 61% with the latest
+  explainers and is still the weakest. These are model labels (silver), reported apart from the human labels.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
