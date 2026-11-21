@@ -45,6 +45,10 @@ class RedFlags(unittest.TestCase):
         letter = doc("GFT-1", "gift_letter", "I, Sam Sample, born 17 February 1959, give a gift of £5,000.00.")
         self.assertEqual(self.codes(bundle([tm22()], [letter], [TXN], [ENTRY])), [("red_flag", "ESC_LISTED_PARTY")])
 
+    def test_gift_letter_dob_written_as_dob(self):
+        letter = doc("GFT-1", "gift_letter", "I, Sam Sample (DOB: 17 February 1959), give a gift of £5,000.00.")
+        self.assertEqual(self.codes(bundle([tm22()], [letter], [TXN], [ENTRY])), [("red_flag", "ESC_LISTED_PARTY")])
+
     def test_gift_letter_birth_date_differs(self):
         letter = doc("GFT-1", "gift_letter", "I, Sam Sample, born 3 May 1980, give a gift of £5,000.00.")
         self.assertEqual(self.codes(bundle([tm22()], [letter], [TXN], [ENTRY])), [("explains", "LIST_MATCH_DIFFERENT_PARTY")])

@@ -106,7 +106,9 @@ def _identity_records(b: CaseBundle, name: str) -> list[dict]:
         # Prose or letter: "I, Riley Selholt, born 17 February 1959, ..."  or a "**Date of birth:**" field.
         if not _doc_mentions(doc, name) or doc.type == "due_diligence_summary":
             continue
-        for m in re.finditer(r"born\s+(?:on\s+)?(\d{1,2}\s+[A-Za-z]+\s+\d{4})", doc.text):
+        # "born 17 February 1959", "(DOB: 8 June 1969)", "date of birth 1969-06-08"
+        for m in re.finditer(r"(?:born|\bDOB\b|date of birth)[:\s]+(?:on\s+)?(\d{1,2}\s+[A-Za-z]+\s+\d{4}|\d{4}-\d{2}-\d{2})",
+                             doc.text, re.I):
             near = doc.text[max(0, m.start() - 120): m.start()]
             if _doc_mentions(Doc("", "", "", None, near, {}, near), name):
                 d = parse_date(m[1])
