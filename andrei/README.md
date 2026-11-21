@@ -13,6 +13,7 @@ stopping at the first that settles it; one rulebook makes every verdict, and mod
 | [`TEAM.md`](TEAM.md) | Who owns what, milestones, house rules |
 | [`SCORING.md`](SCORING.md) | The brief's constraints and cost maths, and what they imply |
 | [`DATA.md`](DATA.md) | What the dataset looks like and how we tune without labels |
+| [`kickoff-transcript.md`](kickoff-transcript.md) | The organisers' kick-off talk (Granola transcript) and what it means for us |
 | [`CLAUDE.md`](CLAUDE.md) | Rules for coding agents (Claude Code, Cursor, Codex) working in this repo |
 
 ## Layout
