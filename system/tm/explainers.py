@@ -1257,7 +1257,22 @@ def _staged_payments(b: CaseBundle, txns: list[dict]):
             f"payment schedule is on file; ask for the contract and its payment schedule.")
 
 
-_TWINS = (_own_round_trip, _funded_purchase, _invoiced_receipts, _staged_payments)
+_FINANCE_PAYER = re.compile(r"(invoice finance|factoring|trade finance)", re.I)
+
+
+def _unbacked_advance(b: CaseBundle, txns: list[dict]):
+    """An invoice-finance advance with no facility agreement or remittance advice on file: ask for them (no suspicion)."""
+    adv = [t for t in txns if t.get("direction") == "in" and _FINANCE_PAYER.search(t.get("counterparty_name") or "")]
+    if not adv or any(_advance_docs_for(b, t, _party(t.get("counterparty_name"))) for t in adv):
+        return None
+    t = adv[0]
+    return adv, "RFI_SOURCE_OF_FUNDS", (
+        f"{money(t['amount_gbp'])} came in as '{t.get('reference')}' from {_party(t.get('counterparty_name'))} on "
+        f"{fmt_date(_txn_date(t))} ({t['transaction_id']}), an invoice-finance advance with no facility agreement or "
+        f"remittance advice on file; ask the client for the agreement and the remittance advice for this advance.")
+
+
+_TWINS = (_own_round_trip, _funded_purchase, _invoiced_receipts, _staged_payments, _unbacked_advance)
 
 
 def missing_document(b: CaseBundle) -> Checks:
@@ -1432,10 +1447,10 @@ def declared_funding(b: CaseBundle) -> Checks:
                 evidence = [doc.doc_id] + ([d.doc_id for d in b.docs.values() if kind_ == "order" and _kind(d, "order")])
                 evidence += [t["transaction_id"], e["transaction_id"]]
                 multiple = m.get("multiple")
-                if code == "INVOICE_MATCHES":
-                    # Kept as an RFI on purpose (Clotilde, 15:30): the order and invoice explain where the money went,
-                    # but nothing documents the account it came from, and this shape has no structural cross-check
-                    # like the 5x split. A wrong close costs 10, a wrong RFI 3.
+                if code == "INVOICE_MATCHES" and False:
+                    # Was kept as an RFI (Clotilde, 15:30). Switched to CLOSE (Lorenzo, 16:30): the funding comes from the
+                    # client's own-name account exactly as in the OWN_ACCOUNT shape we already close, and the team labels
+                    # and the blind Grok labels close this shape too. Flip `and False` off to go back to the RFI.
                     signals.append(Signal(
                         alert_id=a["alert_id"], kind="partial", code="RFI_SOURCE_OF_FUNDS",
                         facts=(f"{facts}; nothing on file shows the client holds the account the funding came from "
