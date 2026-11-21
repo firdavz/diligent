@@ -42,8 +42,8 @@ CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 YES_AT = 0.90  # tier-1 probability at or above this -> "yes"
 NO_AT = 0.10  # at or below this -> "no"; in between -> "unknown"
 SEED = 7
-TIMEOUT_S = 30  # per attempt; keeps a stuck call from eating the 30-minute run limit
-ATTEMPTS = 3  # same request again on 429 / 5xx / network error; anything else -> unknown
+TIMEOUT_S = 20  # per attempt; keeps a stuck call from eating the 30-minute run limit
+ATTEMPTS = 2  # one retry of the identical request on 429 / 5xx / network error (FEDYA_BRIEF: one retry at most)
 MAX_DOC_CHARS = 12000  # per document, cut deterministically
 PROMPT_VERSION = "reader-v1"  # change it whenever a prompt changes, so old cached answers are not reused
 
