@@ -599,6 +599,32 @@ def red_flags(b: CaseBundle) -> Checks:
     return signals, questions
 
 
+_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+# OFF until the organisers say a weekday that doesn't fit its date is a planted inconsistency: on the development set it shows up
+# in 46 business-record documents, 9 of them in cases labelled CLOSE and none labelled ESCALATE, so it may just be generator noise.
+WEEKDAY_CHECK = False
+
+
+def weekday_conflicts(b: CaseBundle) -> Checks:
+    """A record that names a weekday the date doesn't fall on ("9 August 2026 | Saturday market" on a Sunday) contradicts itself."""
+    if not WEEKDAY_CHECK:
+        return [], []
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        if doc.type in ("due_diligence_summary", "proof_of_address"):
+            continue
+        bad = []
+        for line in doc.text.splitlines():
+            d = parse_date(line) if re.search(r"\d{1,2} [A-Z][a-z]+ \d{4}", line) else None
+            named = [w for w in _WEEKDAYS if w in line.lower()]
+            if d and named and _WEEKDAYS[d.weekday()] not in named:
+                bad.append(f"{fmt_date(d)} is called {named[0].title()} but was a {_WEEKDAYS[d.weekday()].title()}")
+        if bad:
+            return [Signal(alert_id=ALL_ALERTS, kind="red_flag", code="ESC_UNEXPLAINED_FUNDS",
+                           facts=f"{doc.doc_id} contradicts itself ({'; '.join(bad[:2])}), so the record cannot be relied on to explain the money.",
+                           evidence=[doc.doc_id], source="red_flags.weekday_conflicts")], []
+    return [], []
+
+
 def contradictory_stories(b: CaseBundle) -> Checks:
     """Two or more conversations with the customer about the money: only a reader can tell whether the stories clash.
     A "yes" from D's reader becomes a (soft) red flag on the whole case; "unknown" changes nothing."""
@@ -622,4 +648,4 @@ def contradictory_stories(b: CaseBundle) -> Checks:
 # Order matters: when several checks fire, the first signal's code becomes the case's reason code, so the most specific go first.
 CHECKS: list = [listed_party, fraud_report, structuring_intent, evasive_routing, invoice_mismatch, linked_new_company,
                 shared_payee_addresses, dissolved_counterparty, corridor_to_individuals, forwarded_to_exchange, third_party_story,
-                contradictory_stories]
+                contradictory_stories, weekday_conflicts]
