@@ -3,6 +3,10 @@
 Track 1 alert triage. The design and the rules you must not break are in [`andrei/CLAUDE.md`](andrei/CLAUDE.md) and
 [`andrei/ARCHITECTURE.md`](andrei/ARCHITECTURE.md): read them before changing code.
 
+## The SOP decides
+Each institution's `POLICY.md` is the source of truth. A label, a model opinion or a rule that contradicts it is wrong.
+When in doubt, find the clause and quote it (labels: `sop_basis`; code: the audit trail does it).
+
 ## Commit and push as you go
 - Work on `track1-alert-closing`. `git pull --rebase` before you start and before every push.
 - **After any labelling or label review** (lines added or changed in `eval/labels/*.jsonl`): run

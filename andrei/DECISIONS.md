@@ -167,6 +167,22 @@ Teammates: keep your own notes in a folder named after you, like this one.
   leaves unknown. pplx-decider `:free` as a fallback only: free-tier rate limits are a risk when the judges run 800 cases ×5.
 - Cache every answer as before; round probabilities (e.g. to 2 dp) before thresholding so float drift can't flip anything.
 
+## D19 — The SOP is the source of truth
+- Each institution's `POLICY.md` decides. Labels, the blind model's opinions, our own judgement and the code all yield
+  to it. When a case looks doubtful, find the clause first; ask the organisers only where two clauses genuinely pull apart.
+- Applied (21 Nov): 44 of the 50 doubtful labels are settled by a clause, now `confidence: high` with the clause quoted in
+  `sop_basis`:
+  - the own-account clause (no document showing the customer holds the account → RFI);
+  - the internal-list clause (nothing settles it and nothing else concerning → RFI);
+  - "no suspicion yet" → RFI, not ESCALATE;
+  - "signs of crime" → ESCALATE;
+  - the reason-code table.
+- Still open (6 cases), and the only policy questions for Ahmad:
+  1. "Fits the declared profile" (WITHIN_PROFILE) versus "the evidence explains it": the freelancer studio and the group
+     trip with no document.
+  2. Does a customer's chat count as evidence on file (re-deposited cash)?
+- Rules and code follow the same order: SOP clause → code. The audit trail quotes the clause (D15).
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
