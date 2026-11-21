@@ -36,7 +36,7 @@ Python 3 standard library only. Optional `OPENROUTER_API_KEY` turns on the reade
 | Investment | 500 / 250 / 250 | 85 / 85 | 0 |
 | Payments and FX | 499 / 251 / 250 | 80 / 80 | 0 |
 
-- **Independent check:** a blind Grok labeller (no access to our labels or outputs) labelled all 4,000 cases; the
+- **Independent check:** a blind Grok labeller (no access to our labels or outputs) labelled all 4,000 cases (251 answers revised after a second look, marked `revised` in `eval/labels_model/`); the
   system agrees on 3,996 / 4,000 verdicts (99.9%); only one case we close is one it would escalate.
 - **Reproducibility:** 5 runs with an empty model cache gave the same verdict and reason code on 4,000 / 4,000 cases.
 - **Speed:** a few seconds per 1,000 cases, well under 30 minutes per 200.
