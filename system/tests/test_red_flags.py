@@ -93,7 +93,7 @@ class RedFlags(unittest.TestCase):
                   "# Company register extract for Gone Trading Ltd\n**Company:** Gone Trading Ltd\n**Status:** Dissolved on 7 October 2025\n")
         txn = dict(TXN, counterparty_name="Gone Trading Ltd")
         alert = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1"], "measured": {}}
-        self.assertEqual(self.codes(bundle([alert], [reg], [txn])), [("red_flag", "ESC_THIRD_PARTY_FUNDING")])
+        self.assertEqual(self.codes(bundle([alert], [reg], [txn])), [("red_flag", "ESC_UNEXPLAINED_FUNDS")])
 
     def test_payer_dissolved_after_the_payment_is_fine(self):
         reg = doc("REG-1", "company_register_extract",
@@ -101,6 +101,47 @@ class RedFlags(unittest.TestCase):
         txn = dict(TXN, counterparty_name="Gone Trading Ltd")
         alert = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1"], "measured": {}}
         self.assertEqual(self.codes(bundle([alert], [reg], [txn])), [])
+
+    def test_invoice_dated_after_the_payment_with_another_amount(self):
+        inv = doc("INV-1", "supplier_invoices", "| Invoice | Dated | Goods | Amount |\n|---|---|---|---|\n"
+                  "| INV 111 | 20 August 2026 | widgets | £6,000.00 |\n")
+        pay = dict(TXN, direction="out", reference="INV 111", counterparty_name="Widget Co")
+        alert = {"alert_id": "A1", "rule_id": "TM01", "transaction_ids": [], "measured": {}}
+        self.assertEqual(self.codes(bundle([alert], [inv], [pay])), [("red_flag", "ESC_INVOICE_MISMATCH")])
+
+    def test_matching_invoice_raises_nothing(self):
+        inv = doc("INV-1", "supplier_invoices", "| Invoice | Goods | Amount |\n|---|---|---|\n| INV 111 | widgets | £5,000.00 |\n")
+        pay = dict(TXN, direction="out", reference="INV 111", counterparty_name="Widget Co")
+        alert = {"alert_id": "A1", "rule_id": "TM01", "transaction_ids": [], "measured": {}}
+        self.assertEqual(self.codes(bundle([alert], [inv], [pay])), [])
+
+    def test_client_cannot_justify_the_higher_risk_routing(self):
+        note = doc("NTE-1", "staff_note", "The director said the goods come from Turkey but was unable to explain why the money goes to Lebanon.")
+        alert = {"alert_id": "A1", "rule_id": "TM06", "transaction_ids": [], "measured": {"countries": "Lebanon"}}
+        self.assertEqual(self.codes(bundle([alert], [note])), [("red_flag", "ESC_HIGH_RISK_CORRIDOR")])
+
+    def test_many_payees_at_three_addresses(self):
+        rows = "".join(f"| Payee {i} | Italy | {i % 3 + 1} Shared Road | £500.00 |\n" for i in range(12))
+        pf = doc("PAY-1", "payment_file", "| Payee | Country | Address | Amount |\n|---|---|---|---|\n" + rows)
+        alert = {"alert_id": "A1", "rule_id": "TM04", "transaction_ids": [], "measured": {}}
+        self.assertEqual(self.codes(bundle([alert], [pf])), [("red_flag", "ESC_MULE_ACTIVITY")])
+
+    def test_money_out_to_a_new_company_run_by_the_clients_director(self):
+        own = doc("INC-1", "company_register_extract", "**Company:** Client Ltd\n| Officer | Role |\n|---|---|\n| Pat Boss | Director |\n")
+        new = doc("REG-1", "company_register_extract",
+                  "**Company:** Fresh Holdings Ltd\n**Incorporated:** 1 May 2026\n| Officer | Role |\n|---|---|\n| Pat Boss | Director |\n")
+        out = dict(TXN, transaction_id="T2", direction="out", counterparty_name="Fresh Holdings Ltd")
+        alert = {"alert_id": "A1", "rule_id": "TM02", "transaction_ids": ["T1", "T2"], "measured": {}}
+        b = bundle([alert], [own, new], [TXN, out], customer={"name": "Client Ltd", "kind": "business"})
+        b.case["review_window"] = {"from": "2026-08-01", "to": "2026-08-31"}
+        self.assertEqual(self.codes(b), [("red_flag", "ESC_PASS_THROUGH")])
+
+    def test_unrelated_payers_forwarded_to_an_exchange_within_a_day(self):
+        ins = [dict(TXN, transaction_id=f"T{i}", counterparty_name=n, amount_gbp=1000.0) for i, n in ((1, "Ann One"), (2, "Bob Two"))]
+        out = dict(TXN, transaction_id="T3", direction="out", counterparty_name="Quick Crypto Exchange", amount_gbp=1950.0,
+                   booked_at="2026-08-13T12:00:00Z")
+        alert = {"alert_id": "A1", "rule_id": "TM02", "transaction_ids": ["T1", "T2", "T3"], "measured": {}}
+        self.assertEqual(self.codes(bundle([alert], [], ins + [out])), [("red_flag", "ESC_MULE_ACTIVITY")])
 
     def test_ordinary_contact_note_raises_nothing(self):
         note = doc("NTE-2", "contact_note", "Customer called to set up a standing order. Guided them through the app.")
