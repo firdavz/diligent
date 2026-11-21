@@ -73,11 +73,14 @@ ESCALATE needed but you said CLOSE: 10; but RFI: 3. RFI needed but ESCALATE: 2. 
 every alert, and when torn between RFI and ESCALATE prefer ESCALATE only if there is actual suspicion.
 
 Answer with ONE JSON object and nothing else:
-{"verdict": "CLOSE|RFI|ESCALATE", "reason_code": "<one code valid for that verdict, from the SOP table>",
+{"verdict": "CLOSE|RFI|ESCALATE", "reason_code": "<one code valid for that verdict, from the SOP table>", "confidence": 0-100,
  "sop_basis": "the SOP clause(s) that decide it, quoted in a few words",
  "key_evidence": ["IDs of the documents, transactions or list entries that decide it, exactly as written in the case"],
- "confidence": "high|medium|low",
- "rationale": "2-4 sentences naming this case's facts (names, amounts, dates, document IDs); for an RFI say exactly what to ask for"}
+ "rationale": "2-4 sentences naming this case's facts (names, amounts, dates, document IDs); for an RFI say exactly what to ask for",
+ "why_not": {"<each of the two verdicts you did NOT choose>": "one sentence: the fact or clause that rules it out"},
+ "doubts": "what fact, if different, would change your verdict; empty string if none"}
+confidence = your probability (0-100) that the verdict is right: 90+ only when a clause settles it and you checked amounts, names
+and dates; 60-80 for a judgement call between two verdicts; below 60 when guessing.
 
 --- SOP ---
 """
@@ -203,7 +206,7 @@ def main():
         except json.JSONDecodeError:
             j = {}
         ok = j.get("verdict") in CODES and j.get("reason_code") in CODES.get(j.get("verdict"), ())
-        row = {"case_id": cid, **{k: j.get(k) for k in ("verdict", "reason_code", "sop_basis", "key_evidence", "confidence", "rationale")},
+        row = {"case_id": cid, **{k: j.get(k) for k in ("verdict", "reason_code", "sop_basis", "key_evidence", "confidence", "rationale", "why_not", "doubts")},
                "cost": round(cost, 4), "valid": ok, **({} if ok else {"raw": text[:400]})}
         json.dump(row, open(path, "w", encoding="utf-8"), ensure_ascii=False)
         return row
