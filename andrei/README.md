@@ -15,6 +15,7 @@ stopping at the first that settles it; one rulebook makes every verdict, and mod
 | [`DATA.md`](DATA.md) | What the dataset looks like and how we tune without labels |
 | [`RULES.md`](RULES.md) | Every rule and policy setting in the brief, and where the code enforces it |
 | [`bank-findings.md`](bank-findings.md) | What decides each bank case shape: the work list for explainers and red flags |
+| [`emoney-findings.md`](emoney-findings.md) | Same for e-money |
 | [`kickoff-transcript.md`](kickoff-transcript.md) | The organisers' kick-off talk (Granola transcript) and what it means for us |
 | [`CLAUDE.md`](CLAUDE.md) | Rules for coding agents (Claude Code, Cursor, Codex) working in this repo |
 
