@@ -13,7 +13,17 @@ and B's explainers can still close it. Checks (all hard unless noted; run `pytho
 | `fraud_report` | a document of type `*fraud_report*` (or text about a scam) is on file | `red_flag ESC_MULE_ACTIVITY` on the whole case |
 | `structuring_intent` | staff note records the customer asking whether staying under a limit avoids aggregation / reporting / ID checks | `red_flag ESC_STRUCTURING` |
 | `third_party_story` | the customer says the money is other people's, or says "a friend" while the payer is a company | `red_flag ESC_MULE_ACTIVITY` / `ESC_THIRD_PARTY_FUNDING`; unreadable chats become a `Question` for D |
-| `dissolved_counterparty` | the register shows the counterparty company was dissolved before the payment date | `red_flag ESC_THIRD_PARTY_FUNDING` |
+| `dissolved_counterparty` | the register shows the counterparty company was dissolved before the payment date | `red_flag ESC_UNEXPLAINED_FUNDS` (whole case) |
+| `evasive_routing` | TM06 + a note says the client could not / would not justify the routing to the higher-risk country | `red_flag ESC_HIGH_RISK_CORRIDOR` |
+| `invoice_mismatch` | an invoice row cited by an outgoing payment has another amount, is dated after the payment, or bills consultancy to a goods business | `red_flag ESC_INVOICE_MISMATCH` (whole case) |
+| `linked_new_company` | money goes out (TM02/TM04/TM08 case) to companies incorporated in the last year whose officer/controller also runs the client | `red_flag ESC_PASS_THROUGH` |
+| `shared_payee_addresses` | a payment file with ≥ 10 payees at ≤ a third as many addresses | `red_flag ESC_MULE_ACTIVITY` |
+| `corridor_to_individuals` | TM06: ≥ 2 unrelated payers in, then payments to ≥ 2 differently-surnamed people in the higher-risk country | `red_flag ESC_HIGH_RISK_CORRIDOR` (whole case) |
+| `forwarded_to_exchange` | TM02: ≥ 2 unrelated payers, ≥ 80% on to an exchange within a day | `red_flag ESC_MULE_ACTIVITY` (whole case) |
+
+Order in `CHECKS` matters: the first red flag's code becomes the case's reason code, so the most specific checks run first.
+On the 226 team labels (21 Nov, 15:00): no labelled ESCALATE missed, no red flag on a labelled CLOSE/RFI case, and the escalation
+reason code matches the label in every bank, e-money and investment case.
 
 ## For Clotilde (B)
 - **Don't build the list-match CLOSE** — `listed_party` already emits `LIST_MATCH_DIFFERENT_PARTY`. The *other* alerts in the same
