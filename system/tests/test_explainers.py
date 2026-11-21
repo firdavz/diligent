@@ -265,5 +265,129 @@ class ReturningCustomer(unittest.TestCase):
         self.assertEqual(self.codes(own_bundle([self.tm07(txns)], [self.rvf(11), self.STMT], txns)), [])
 
 
+def dated_doc(doc_id, dtype, text, dated, title=None):
+    return parse_doc({"doc_id": doc_id, "type": dtype, "title": title or dtype, "dated": dated}, text)
+
+
+class DocumentedEvent(unittest.TestCase):
+    PAYOUT = {"transaction_id": "T1", "booked_at": "2026-06-14T10:00:00Z", "direction": "in",
+              "channel": "faster_payment", "amount_gbp": 16250.40, "counterparty_name": "Testshire Life Assurance plc",
+              "counterparty_account": "10-20-30 40506070", "reference": "CLAIM 55123"}
+
+    def letter(self, text=None, dated="2026-06-12", dtype="insurer_letter",
+               title="Claim settlement letter from Testshire Life Assurance plc"):
+        text = text or ("Dear Pat Example,\nWe have accepted your claim, reference CLAIM 55123.\n"
+                        "A settlement payment of £16,250.40 will be sent to you by bank transfer.")
+        return dated_doc("INS-1", dtype, text, dated, title)
+
+    def tm07(self, txns):
+        return {"alert_id": "A1", "rule_id": "TM07", "transaction_ids": [t["transaction_id"] for t in txns],
+                "measured": {"dormant_days": 300, "limit_gbp": 5000}}
+
+    def codes(self, b):
+        from tm.explainers import documented_event
+        return [(s.kind, s.code) for s in documented_event(b)[0]]
+
+    def test_insurer_letter_matching_amount_payer_and_claim_closes(self):
+        b = own_bundle([self.tm07([self.PAYOUT])], [self.letter()], [self.PAYOUT])
+        self.assertEqual(self.codes(b), [("explains", "DOCUMENTED_EVENT")])
+
+    def test_explains_tm01_whatever_the_multiple(self):
+        alert = tm01([self.PAYOUT], 16250.40, 2000.0, 8.13)  # 8x: the 5x rule is for own accounts only
+        self.assertEqual(self.codes(own_bundle([alert], [self.letter()], [self.PAYOUT])),
+                         [("explains", "DOCUMENTED_EVENT")])
+
+    def test_claim_reference_not_in_the_letter_explains_nothing(self):
+        text = "Dear Pat Example,\nWe have accepted claim CLAIM 99999.\nWe will pay £16,250.40."
+        self.assertEqual(self.codes(own_bundle([self.tm07([self.PAYOUT])], [self.letter(text)], [self.PAYOUT])), [])
+
+    def test_letter_addressed_to_someone_else_explains_nothing(self):
+        text = "Dear Robin Other,\nWe have accepted your claim, CLAIM 55123.\nWe will pay £16,250.40."
+        self.assertEqual(self.codes(own_bundle([self.tm07([self.PAYOUT])], [self.letter(text)], [self.PAYOUT])), [])
+
+    def test_letter_dated_after_the_credit_explains_nothing(self):
+        b = own_bundle([self.tm07([self.PAYOUT])], [self.letter(dated="2026-06-15")], [self.PAYOUT])
+        self.assertEqual(self.codes(b), [])
+
+    def test_letter_dated_too_long_before_explains_nothing(self):
+        b = own_bundle([self.tm07([self.PAYOUT])], [self.letter(dated="2026-04-01")], [self.PAYOUT])
+        self.assertEqual(self.codes(b), [])
+
+    def test_letter_from_another_company_explains_nothing(self):
+        b = own_bundle([self.tm07([self.PAYOUT])], [self.letter(title="Claim letter from Other Mutual plc")],
+                       [self.PAYOUT])
+        self.assertEqual(self.codes(b), [])
+
+    def test_amount_differs_explains_nothing(self):
+        text = "Dear Pat Example,\nWe have accepted your claim, CLAIM 55123.\nWe will pay £16,250.00."
+        self.assertEqual(self.codes(own_bundle([self.tm07([self.PAYOUT])], [self.letter(text)], [self.PAYOUT])), [])
+
+    def test_invoices_and_gift_letters_are_left_to_their_own_checks(self):
+        for dtype in ("supplier_invoice", "gift_letter", "venue_email", "credit_note"):
+            b = own_bundle([self.tm07([self.PAYOUT])], [self.letter(dtype=dtype)], [self.PAYOUT])
+            self.assertEqual(self.codes(b), [], dtype)
+
+    def test_own_name_credit_is_left_to_own_account(self):
+        own = {**self.PAYOUT, "counterparty_name": "Pat Example"}
+        text = "Dear Pat Example,\nTransfer of £16,250.40, CLAIM 55123, to Pat Example."
+        b = own_bundle([self.tm07([own])], [self.letter(text, title="Letter from Pat Example")], [own])
+        self.assertEqual(self.codes(b), [])
+
+    # ---- cash: sale receipts
+    CASH = {"transaction_id": "T1", "booked_at": "2026-06-09T12:00:00Z", "direction": "in", "channel": "cash_topup",
+            "amount_gbp": 1340.0, "counterparty_name": None, "counterparty_account": None, "reference": "CASH TOP UP"}
+    TM05 = {"alert_id": "A1", "rule_id": "TM05", "transaction_ids": ["T1"], "measured": {"limit_gbp": 1000}}
+
+    def receipt(self, body, dtype="sale_receipt"):
+        return dated_doc("SAL-1", dtype, body, "2026-06-08", "Sale receipt")
+
+    def test_seller_phrasings_all_read_as_the_customer(self):
+        bodies = [
+            "**Seller:** Pat Example\n**Buyer:** Sam Buyer\nReceived £1,340.00 in cash.",
+            "Seller: Pat Example\nBuyer: Sam Buyer\nTotal Amount Paid: £1,340.00\nPayment Method: Cash",
+            "I, Pat Example, confirm the sale of one bike to Sam Buyer for £1,340.00 in cash.",
+            "I, Pat Example, have today sold one bike to Sam Buyer for £1,340.00, paid in cash.",
+            "This document confirms the sale of one bike from Pat Example to Sam Buyer for £1,340.00 in cash.",
+            "This confirms that Pat Example has sold one bike to Sam Buyer for £1,340.00 in cash.",
+        ]
+        for body in bodies:
+            b = own_bundle([self.TM05], [self.receipt(body)], [self.CASH])
+            self.assertEqual(self.codes(b), [("explains", "DOCUMENTED_EVENT")], body)
+
+    def test_someone_else_selling_explains_nothing(self):
+        body = "I, Sam Buyer, confirm the sale of one bike to Pat Example for £1,340.00 in cash."
+        self.assertEqual(self.codes(own_bundle([self.TM05], [self.receipt(body)], [self.CASH])), [])
+
+    def test_vehicle_receipt_needs_the_customers_ownership_document(self):
+        cash = {**self.CASH, "amount_gbp": 12500.0, "channel": "cash_deposit"}
+        body = "**Seller:** Pat Example\nReceived £12,500.00 in cash for a 2020 hatchback, registration AB20 CDE."
+        rec = self.receipt(body, "vehicle_sale_receipt")
+        self.assertEqual(self.codes(own_bundle([self.TM05], [rec], [cash])), [])  # no ownership document
+        mine = doc("INS-1", "insurance_schedule", "**Policyholder:** Pat Example\n**Vehicle:** registration AB20 CDE")
+        from tm.explainers import documented_event
+        s = documented_event(own_bundle([self.TM05], [rec, mine], [cash]))[0]
+        self.assertEqual([x.code for x in s], ["DOCUMENTED_EVENT"])
+        self.assertIn("INS-1", s[0].evidence)
+        theirs = doc("INS-1", "insurance_schedule", "**Policyholder:** Pat Example\n**Vehicle:** registration ZZ99 ZZZ")
+        self.assertEqual(self.codes(own_bundle([self.TM05], [rec, theirs], [cash])), [])
+
+    # ---- house move: deposit returned, holding deposit paid
+    def test_deposit_return_and_holding_deposit_both_documented_closes_tm02(self):
+        back = {"transaction_id": "T1", "booked_at": "2026-06-10T10:00:00Z", "direction": "in",
+                "channel": "faster_payment", "amount_gbp": 1900.0, "counterparty_name": "Oldtown Lettings Ltd",
+                "counterparty_account": "11-11-11 11111111", "reference": "DEPOSIT RETURN"}
+        top = xfer("T2", 10, "in", 600.0, "22-22-22 22222222")
+        out = {"transaction_id": "T3", "booked_at": "2026-06-11T10:00:00Z", "direction": "out",
+               "channel": "faster_payment", "amount_gbp": 2500.0, "counterparty_name": "Newtown Homes Ltd",
+               "counterparty_account": "33-33-33 33333333", "reference": "HOLDING DEPOSIT"}
+        docs = [dated_doc("LET-1", "deposit_return_letter", "Dear Tenant,\nWe are returning £1,900.00 to you today.",
+                          "2026-06-09", "Deposit return from Oldtown Lettings Ltd"),
+                dated_doc("LET-2", "holding_deposit_receipt", "Dear Tenant,\nThank you for your holding deposit of £2,500.00.",
+                          "2026-06-11", "Holding deposit receipt from Newtown Homes Ltd")]
+        alert = {"alert_id": "A1", "rule_id": "TM02", "transaction_ids": ["T1", "T2", "T3"], "measured": {}}
+        self.assertEqual(self.codes(own_bundle([alert], docs, [back, top, out])), [("explains", "DOCUMENTED_EVENT")])
+        self.assertEqual(self.codes(own_bundle([alert], docs[:1], [back, top, out])), [])  # holding deposit undocumented
+
+
 if __name__ == "__main__":
     unittest.main()

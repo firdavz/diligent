@@ -218,7 +218,8 @@ def _not_own(txns: list[dict], own: dict[str, Doc]) -> list[dict]:
 
 
 def _own_covers(b: CaseBundle, a: dict, txns: list[dict], own: dict[str, Doc]) -> bool:
-    """Would the alert still have fired without the money moved between the customer's own accounts?"""
+    """Would the alert still have fired without the explained transactions (`own`: transaction_id -> the document
+    that explains it)? Used for own-account money and for documented events alike."""
     m = a.get("measured", {})
     rest = _not_own(txns, own)
     rule = a.get("rule_id")
@@ -235,9 +236,11 @@ def _own_covers(b: CaseBundle, a: dict, txns: list[dict], own: dict[str, Doc]) -
         rest_in = sum(t["amount_gbp"] for t in rest if t.get("direction") == "in")
         rest_out = sum(t["amount_gbp"] for t in rest if t.get("direction") == "out" and t.get("channel") != "card")
         return rest_in < floor and rest_out < floor
-    if rule in ("TM06", "TM08"):
+    if rule in ("TM06", "TM07", "TM08"):
         limit = m.get("limit_gbp")
         return bool(limit) and sum(t["amount_gbp"] for t in rest) < limit
+    if rule == "TM05":  # every alerted cash deposit is explained
+        return not [t for t in rest if _is_cash_in(t)]
     return False
 
 
@@ -364,9 +367,169 @@ def returning_customer(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- DOCUMENTED_EVENT
+
+# A letter or receipt about a one-off event is written shortly before (or on the day of) the money moving.
+EVENT_DOC_MAX_DAYS_BEFORE = 30
+# Which documents this check reads. This only narrows the check (it can never add a close): invoices, contracts,
+# credit notes, remittances, emails and gift letters belong to invoice_matches / refund / third_party_documented,
+# which report their own codes and verify their own conditions.
+_EVENT_DOC_KINDS = ("letter", "receipt", "completion")
+_NOT_EVENT_DOC_KINDS = ("gift",)
+
+
+def _is_event_doc(doc: Doc) -> bool:
+    kind = (doc.type or "").lower()
+    return any(k in kind for k in _EVENT_DOC_KINDS) and not any(k in kind for k in _NOT_EVENT_DOC_KINDS)
+_GREETING = re.compile(r"^Dear\s+(.+?),?\s*$", re.M)
+_GENERIC_ADDRESSEE = {"sir", "madam", "sir madam", "beneficiary", "tenant", "customer", "client", "policyholder",
+                      "sir or madam", "colleague", "applicant"}
+_REGISTRATION = re.compile(r"\b([A-Z]{2}\d{2}\s?[A-Z]{3})\b")
+_NAME = r"([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)+)"
+_SELLER_PATTERNS = (  # ways a receipt names its seller, most explicit first
+    re.compile(r"^\s*\**Seller:?\**:?\s*([^,\n]+)", re.M | re.I),
+    re.compile(r"\bI,\s*([^,]+),\s*(?:[a-z]+\s+){0,4}(?:sold|sale)\b", re.I),  # "I, X, have today sold" / "hereby confirm the sale"
+    re.compile(r"\bsale of\b[^.]*?\bfrom\s+" + _NAME + r"\s+to\s+"),
+    re.compile(_NAME + r"\s+has\s+sold\b"),
+    re.compile(r"\bsold by\s+" + _NAME),
+)
+
+
+def _doc_date(doc: Doc) -> date | None:
+    return parse_date(doc.dated) or parse_date(doc.fields.get("dated"))
+
+
+def _party(name: str | None) -> str:
+    """'Wenbrook Solicitors LLP client account' -> 'Wenbrook Solicitors LLP'."""
+    return re.sub(r"\s+client account\s*$", "", name or "", flags=re.I).strip()
+
+
+def _addressed_elsewhere(b: CaseBundle, doc: Doc) -> bool:
+    """The document names someone other than the customer as its addressee or client."""
+    customer = b.customer.get("name")
+    named = [doc.fields.get(k) for k in ("client", "policyholder", "beneficiary") if doc.fields.get(k)]
+    named += [m for m in _GREETING.findall(doc.text) if norm(m) not in _GENERIC_ADDRESSEE]
+    return any(not same_name(n.split(",")[0], customer) for n in named)
+
+
+def _reference_missing(t: dict, doc: Doc) -> bool:
+    """The transaction reference carries a number (CLAIM 44642, PO 123) that the document doesn't mention."""
+    return any(n not in doc.text for n in re.findall(r"\d{3,}", t.get("reference") or ""))
+
+
+def _seller(doc: Doc) -> str:
+    seller = (doc.fields.get("seller") or "").split(",")[0].strip()
+    for pattern in _SELLER_PATTERNS:
+        if seller:
+            break
+        m = pattern.search(doc.text)
+        seller = m[1].strip() if m else ""
+    return seller
+
+
+def _vehicle_owned(b: CaseBundle, doc: Doc) -> bool | None:
+    """If the receipt is for a registered vehicle: does another document show the customer held that registration?
+    None when the receipt names no registration."""
+    regs = {r.replace(" ", "") for r in _REGISTRATION.findall(doc.text)}
+    if not regs:
+        return None
+    customer = b.customer.get("name")
+    for d in b.docs.values():
+        if d.doc_id == doc.doc_id or not {r.replace(" ", "") for r in _REGISTRATION.findall(d.text)} & regs:
+            continue
+        holder = d.fields.get("policyholder") or d.fields.get("registered keeper") or d.fields.get("owner") or ""
+        if same_name(holder, customer):
+            return True
+    return False
+
+
+def _event_doc_for(b: CaseBundle, t: dict) -> Doc | None:
+    """A document about a one-off event that accounts for transaction t (see documented_event)."""
+    customer = b.customer.get("name")
+    td = _txn_date(t)
+    if not td:
+        return None
+    cash = _is_cash_in(t)
+    payer = _party(t.get("counterparty_name"))
+    if not cash and (not payer or same_name(payer, customer)):
+        return None  # own-name money is own_account's business
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        if not _is_event_doc(doc):
+            continue
+        dd = _doc_date(doc)
+        if not dd or not 0 <= (td - dd).days <= EVENT_DOC_MAX_DAYS_BEFORE:
+            continue
+        if not any(_same_amount(x, t["amount_gbp"]) for x in amounts(doc.text)):
+            continue
+        if cash:
+            if not same_name(_seller(doc), customer) or _vehicle_owned(b, doc) is False:
+                continue
+        else:
+            if not _mentioned(payer, f"{doc.title}\n{doc.text}"):
+                continue
+            if _reference_missing(t, doc) or _addressed_elsewhere(b, doc):
+                continue
+        return doc
+    return None
+
+
+def _event_supporting(b: CaseBundle, docs: list[Doc]) -> list[str]:
+    """Documents backing a sale receipt: the insurance schedule for the same registration, the customer's advert."""
+    ids = {d.doc_id for d in docs}
+    customer = norm(b.customer.get("name"))
+    out = []
+    for d in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        if d.doc_id in ids:
+            continue
+        regs = {r.replace(" ", "") for r in _REGISTRATION.findall(d.text)}
+        same_reg = any(regs & {r.replace(" ", "") for r in _REGISTRATION.findall(x.text)} for x in docs)
+        advert = bool(customer) and f"seller {customer}" in norm(d.text)
+        if same_reg or advert:
+            out.append(d.doc_id)
+    return out
+
+
+def documented_event(b: CaseBundle) -> Checks:
+    """A one-off event documented on file explains the money: a letter from the payer (solicitor, insurer, former
+    employer, letting agent, conveyancer) stating the same amount, dated shortly before, not addressed to anyone else
+    and carrying the transaction's reference number; or, for cash, a sale receipt for the same amount where the
+    customer is the seller (and, for a vehicle, owned it). The alert is explained when, without that money, it would
+    not have fired. Unlike own-account money, the 5x profile rule doesn't apply."""
+    signals: list[Signal] = []
+    for a in b.alerts:
+        if a.get("rule_id") not in ("TM01", "TM02", "TM05", "TM06", "TM07", "TM08"):
+            continue
+        txns = b.alert_txns(a)
+        found = {t["transaction_id"]: doc for t in txns for doc in [_event_doc_for(b, t)] if doc}
+        if not found or not _own_covers(b, a, txns, found):
+            continue
+        parts = []
+        for t in txns:
+            doc = found.get(t["transaction_id"])
+            if not doc:
+                continue
+            dd, td = _doc_date(doc), _txn_date(t)
+            if _is_cash_in(t):
+                parts.append(f"{doc.doc_id} ({doc.title}, dated {fmt_date(dd)}) shows {b.customer.get('name')} as the "
+                             f"seller paid {money(t['amount_gbp'])} in cash, the amount deposited on {fmt_date(td)} "
+                             f"({t['transaction_id']})")
+                continue
+            what = (f"received from {_party(t.get('counterparty_name'))}" if t.get("direction") == "in"
+                    else f"paid to {_party(t.get('counterparty_name'))}")
+            parts.append(f"{doc.doc_id} ({doc.title}, dated {fmt_date(dd)}) records the {money(t['amount_gbp'])} "
+                         f"{what} on {fmt_date(td)} ({t['transaction_id']})")
+        docs = list({d.doc_id: d for d in found.values()}.values())
+        signals.append(Signal(
+            alert_id=a["alert_id"], kind="explains", code="DOCUMENTED_EVENT",
+            facts="; ".join(parts) + ", to the penny.",
+            evidence=list(dict.fromkeys([d.doc_id for d in docs] + _event_supporting(b, docs) + sorted(found))),
+            strength="hard", source="explainers.documented_event",
+        ))
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Next: documented_event (insurer / settlement / solicitor letters, sale receipts; also closes TM07 payouts),
-# refund, invoice_matches (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
+# Next: refund, invoice_matches (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
 # third_party_documented, own account on payments and FX (outgoing own-account transfer; needs a team decision).
 # list_match_different_party is Lorenzo's (red_flags.listed_party).
-CHECKS: list = [business_records, own_account, returning_customer]
+CHECKS: list = [business_records, own_account, returning_customer, documented_event]

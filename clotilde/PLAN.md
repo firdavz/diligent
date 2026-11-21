@@ -4,8 +4,51 @@
 `RFI` twins. **Also responsible for:** E-money (labels, its `POLICY.md`, its score after every run).
 **Done when:** each `CLOSE` code fires on the labelled closable cases, and only those. **Wrongful closes stay at 0.**
 
-Today `CHECKS = []`: every close in `output/` comes from Lorenzo's list-match check (bank 38, e-money 45, payments 22,
-investment 0). Everything else falls back to RFI/ESCALATE, so explainers are where the score is.
+At the start `CHECKS = []`: every close in `output/` came from Lorenzo's list-match check (bank 38, e-money 45,
+payments 22, investment 0). Everything else fell back to RFI/ESCALATE, so explainers are where the score is.
+
+## Status (updated after each check)
+
+`CHECKS = [business_records, own_account, returning_customer, documented_event]` on `track1-alert-closing`
+(PR #1 merged; the `clotilde` branch is retired).
+
+| Check → code | Rules | Close when (all hold) | Commit |
+|---|---|---|---|
+| `business_records` → `BUSINESS_RECORDS_RECONCILE` | TM03 | every alerted cash deposit has its own row in one record table, same amount to the penny, dated on the deposit day or ≤ 2 days before; a stated day's takings ≥ the top-up | ✅ merged |
+| `own_account` → `OWN_ACCOUNT` / `RFI_UPDATED_PROFILE` | TM01, TM02, TM06, TM08 | a statement names the customer as holder (joint holders count), has the transaction's counterparty account (or its "ending" digits) and the same amount; without that money the alert wouldn't fire; TM01 ≥ `own_account_rfi_multiple` → RFI | ✅ merged |
+| `returning_customer` → `RETURNING_CUSTOMER` | TM07 | "re-verified on <date>" inside the dormant period and on/before the reactivation + the money came from a statement-proven own account; the rest moved < the alert's limit | ✅ pushed |
+| `documented_event` → `DOCUMENTED_EVENT` | TM01, TM02, TM05, TM06, TM07, TM08 | an event letter / receipt / completion statement states the amount to the penny, names the payer, is dated 0–30 days before, carries the reference number, isn't addressed to someone else; cash: the customer is the seller (and owned the vehicle) | this commit |
+
+Results on the team labels (rules only, after each step; **wrongful closes 0 throughout**):
+
+| | Start | + business_records | + own_account | + returning_customer | + documented_event |
+|---|---|---|---|---|---|
+| Bank (closable closed /29) | 3 | 7 | 9 | 11 | **18** |
+| E-money (/25) | 2 | 4 | 6 | 9 | **18** |
+| Investment (/28) | 0 | 0 | 10 | 13 | **17** |
+| Payments and FX (/24) | 1 | 1 | 1 | 1 | **2** |
+
+Every shape a check touches closes 100% of its cases; every remaining closable miss belongs to a check not yet built.
+
+### Tests — `system/tests/test_explainers.py` (invented data only; 42 tests)
+| Check | What the tests pin down |
+|---|---|
+| `business_records` (11) | all rows match → close; one row missing, one penny off, row dated after or > 2 days before, top-up above the day's takings, two equal deposits with one row → nothing; collection reports emptied the day before cite the cash procedure but not the KYC summary; only TM03; only cash deposits |
+| `own_account` (11) | TM02 in + out both own → close; destination undocumented, holder someone else, account number differs, amount differs, third-party money left over → nothing; TM01 < 5× close, = 5× RFI_UPDATED_PROFILE, still over profile without the own money → nothing; "account ending" + joint holders; TM07 not handled here |
+| `returning_customer` (6) | re-verified the day before + own statement → close (evidence order, "the day before" in the reason); re-verified after the reactivation or before the dormancy, no statement, no re-verification, large payment out left unexplained → nothing |
+| `documented_event` (14) | insurer letter (amount + payer + claim) → close, also TM01 at 8× (5× is own-account only); claim number missing, addressed to someone else, dated after or > 30 days before, other company, amount differs → nothing; invoice / gift letter / venue email / credit note ignored (their own checks); own-name credit ignored; six seller phrasings read as the customer; someone else selling → nothing; vehicle receipt needs the customer's ownership document (registration must match); house move: deposit return + holding deposit both documented → close, one missing → nothing |
+
+### Next, in order of value
+1. `refund` → `REFUND_OF_EARLIER_PAYMENT`: credit = an earlier outgoing payment to the same party (venue refund, ISA
+   cancellation, credit note) or a re-deposited cash withdrawal; must find the original payment.
+2. `invoice_matches` → `INVOICE_MATCHES`: outgoing payment = invoice/contract amount, payee, reference (hospital, dealer +
+   loan, supplier invoices, held payments in payments and FX, TM07 pre-pause supplier).
+3. `third_party_documented` → `THIRD_PARTY_DOCUMENTED`: gift letter (giver = payer, recipient = customer), invoice-finance
+   advance (= advance rate × financed total).
+4. `collection_documented`, `group_company`, TM10 redundancy (`DOCUMENTED_EVENT`), payments and FX own account (needs a
+   team decision: undocumented UK funding account).
+5. Robustness test: reword dev documents (field names, titles, one-penny rounding) and see which checks still hold —
+   the unseen set may be worded differently.
 
 ## How an explainer fits in (contract recap)
 - `explainers(b) -> (signals, questions)`. One function per check, `(b) -> (signals, questions)`, listed in `CHECKS`.
@@ -90,15 +133,18 @@ withdrawal in #3 was cleared by a review).
 ## Phase 3 — tune (14:30–15:30), freeze at 15:30
 - [ ] After every change: run all four institutions, `python eval/score.py <inst>`; **wrongful closes up anywhere → don't push**.
 - [ ] Read misses in `system/traces/<inst>.jsonl` (each alert's path: `explained` / `partial` / `fallback`).
-- [ ] `system/tests/test_explainers.py` with fake `CaseBundle`s (invented data only), like `test_red_flags.py`.
+- [x] `system/tests/test_explainers.py` with fake `CaseBundle`s (invented data only), like `test_red_flags.py` — see Status.
 - [ ] Check reasons: names, amounts, doc IDs present; RFI says exactly what to ask.
 
 ## Open points to agree with the team
-- **TM01 coverage (Andrei):** is a TM01 explained when the documented credit is the one that broke the profile, or only when
-  the unexplained remainder is back within the multiple? Decide on the labels.
+- ~~**TM01 coverage**~~ decided: a TM01 is explained only when, without the explained credits, the rest of the money
+  received is within the profile multiple (same idea for TM02/TM05/TM06/TM07/TM08 with their own thresholds).
 - **Prose check before closing (Andrei/Fedya):** who raises the "does the chat contradict this close?" `Question` —
   B per check, or the pipeline? Its `if_yes` would be a red flag (Lorenzo's code).
 - **Codes with no exact fit** (bank findings): re-deposited own cash → `REFUND_OF_EARLIER_PAYMENT`; "prove you hold the
   overseas account" → `RFI_SOURCE_OF_FUNDS`. Confirm with labels or the organisers.
-- **Reason-code choice by document type:** the match is on content; picking which CLOSE code to report may use the
-  document's type. Flag to Andrei that this doesn't break D8.
+- **Document type only narrows a check:** `documented_event` reads only letters, receipts and completion statements
+  (not gift letters), so invoices, refunds and gifts get their own code and checks. The verdict still rests on content
+  (amount, payer, date, reference); the type filter can only remove closes, never add one. Flag to Andrei re D8.
+- **Payments and FX own account:** the statement proves the outgoing own-account transfer, but the UK funding account
+  has no statement; policy says an own-name account counts only with a document. Ask Andrei before closing those.
