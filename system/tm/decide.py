@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 
 from .types import ALL_ALERTS, CODES, KIND_VERDICT, CaseBundle, Decision, Signal
-from .util import amounts, money
+from .util import amounts, money, same_name
 
 SEVERITY = {"CLOSE": 0, "RFI": 1, "ESCALATE": 2}
 CLOSE_NEEDS_HARD = True
@@ -75,6 +75,27 @@ def decide_alert(alert: dict, signals: list[Signal], b: CaseBundle) -> tuple[str
     return verdict, [fb], "fallback"
 
 
+def _held_payment_needs_invoice(b: CaseBundle, signals: list[Signal]) -> Signal | None:
+    """Policy (payments and FX): a held payment at or above the invoice threshold to anyone other than the client
+    is released only with an invoice or contract on file. Without a hard INVOICE_MATCHES signal citing it, no CLOSE."""
+    limit = b.policy.get("third_party_invoice_threshold")
+    held = b.held_payment
+    if not limit or not held or held.get("amount_gbp", 0) < limit:
+        return None
+    if same_name(held.get("counterparty_name"), b.customer.get("name")):
+        return None  # transfers to the client's own accounts don't need one
+    if any(s.kind == "explains" and s.strength == "hard" and s.code == "INVOICE_MATCHES"
+           and held["transaction_id"] in s.evidence for s in signals):
+        return None
+    return Signal(
+        alert_id=ALL_ALERTS, kind="partial", code="RFI_PURPOSE_DOCUMENTS",
+        facts=(f"The held payment {held['transaction_id']} of {money(held['amount_gbp'])} to "
+               f"{held.get('counterparty_name')} is at or above the {money(limit)} threshold, and no invoice or contract "
+               f"on file matches it; ask the client for the invoice or contract before it is released."),
+        evidence=[held["transaction_id"]], strength="hard", source="decide.held_payment_invoice",
+    )
+
+
 def decide(b: CaseBundle, signals: list[Signal], answers: list[dict] | None = None) -> Decision:
     per_alert = []
     for a in b.alerts:
@@ -83,6 +104,12 @@ def decide(b: CaseBundle, signals: list[Signal], answers: list[dict] | None = No
                           "path": path, "deciding": deciding})
 
     worst = max((p["verdict"] for p in per_alert), key=SEVERITY.__getitem__, default="ESCALATE")
+    if worst == "CLOSE":
+        guard = _held_payment_needs_invoice(b, signals)
+        if guard:
+            per_alert.append({"alert_id": ALL_ALERTS, "rule_id": "POLICY", "verdict": "RFI",
+                              "path": "held_payment_invoice", "deciding": [guard]})
+            worst = "RFI"
     deciding: list[Signal] = []
     for p in per_alert:
         if p["verdict"] == worst:
