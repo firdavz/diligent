@@ -42,7 +42,13 @@ sub-threshold payments with a staff note; a matching invoice to a company the li
 
 Every shape a check touches closes 100% of its cases; every remaining closable miss belongs to a check not yet built.
 
-### Tests — `system/tests/test_explainers.py` (invented data only; 71 tests)
+**One document, one transaction** (fix after Fedya's report on `invoice_matches`): a table row, and each amount a
+document states outside its tables, backs one transaction per alert; the same holds for event letters / receipts, gift
+letters, remittance advices and refund confirmations, and an original payment can be returned only once. Before the
+fix one invoice line of £X could explain several payments of £X (a wrongful-close risk on TM03 structuring). No
+development case changed; 5 tests pin it down (they fail on the old code).
+
+### Tests — `system/tests/test_explainers.py` (invented data only; 77 tests)
 | Check | What the tests pin down |
 |---|---|
 | `business_records` (11) | all rows match → close; one row missing, one penny off, row dated after or > 2 days before, top-up above the day's takings, two equal deposits with one row → nothing; collection reports emptied the day before cite the cash procedure but not the KYC summary; only TM03; only cash deposits |
@@ -51,6 +57,7 @@ Every shape a check touches closes 100% of its cases; every remaining closable m
 | `documented_event` (14) | insurer letter (amount + payer + claim) → close, also TM01 at 8× (5× is own-account only); claim number missing, addressed to someone else, dated after or > 30 days before, other company, amount differs → nothing; invoice / gift letter / venue email / credit note ignored (their own checks); own-name credit ignored; six seller phrasings read as the customer; someone else selling → nothing; vehicle receipt needs the customer's ownership document (registration must match); house move: deposit return + holding deposit both documented → close, one missing → nothing |
 | `refund` (9) | venue refund of an earlier deposit → close (evidence: email, covering review, both legs); no document, document written before the original payment, no earlier payment of that amount, earlier payment to someone else, document naming neither booking nor party → nothing; cancelled subscription returned to the same account closes TM01 and TM02, without confirmation nothing; cash paid back in needs the review that covered the withdrawal (none, or written before the withdrawal → nothing); TM02 third-party-money wording closes, all-money wording with a big payment out doesn't |
 | `invoice_matches` (11) | hospital invoice → close; invoice dated after the payment, amount differs, other payee, reference number missing, other buyer, other pay-to account → nothing; factoring / employment / insurer documents ignored; financed car needs both the loan agreement and the dealer invoice; stage payments each on their schedule row (held payment cited first), one stage without a row → nothing; payment file covers the contractors and leaves few other parties, too few rows → nothing; own freight invoices may be issued after the receipt when the reference matches, not beyond the grace |
+| one document, one transaction (5) | one invoice row, or one invoice without a table, can't explain three equal payments (TM03); three rows for three payments still close; one sale receipt can't explain two cash deposits; one payment can't be refunded twice; one gift letter can't explain two gifts |
 | `third_party_documented` (9) | gift letter from the payer to the customer → close, also TM01 at 9×; letter from someone else, to someone else, amount differs, written after the money → nothing; invoice-finance advance with agreement + remittance advice → close; no agreement, advance ≠ rate × total, advice for another client → nothing |
 
 ### Next, in order of value
@@ -158,5 +165,7 @@ withdrawal in #3 was cleared by a review).
 - **Document type only narrows a check:** `documented_event` reads only letters, receipts and completion statements
   (not gift letters), so invoices, refunds and gifts get their own code and checks. The verdict still rests on content
   (amount, payer, date, reference); the type filter can only remove closes, never add one. Flag to Andrei re D8.
-- **Payments and FX own account:** the statement proves the outgoing own-account transfer, but the UK funding account
-  has no statement; policy says an own-name account counts only with a document. Ask Andrei before closing those.
+- ~~**Payments and FX own account**~~ decided with Fedya (Payments and FX owner): own-account / TM07 / purchase-order
+  shapes that rest on an own-name account with no statement on file stay **RFI** — the POLICY says such an account
+  counts "only when a document on file shows the customer holds it" (D19: the SOP decides), and a wrong RFI costs 3
+  against 10 for a wrong close. Only the organisers could overturn it (open question in D20).

@@ -564,6 +564,35 @@ class InvoiceMatches(unittest.TestCase):
                         + "\n".join(rows.splitlines()[:2]), "2026-09-19", "Contractor payment file")
         self.assertEqual(self.codes([alert], [few], fees + [supplier]), [])  # 5 parties left > limit 3
 
+    # Reported by Fedya: one invoice line explained several payments of the same amount (wrongful-close risk on TM03).
+    def three_equal_payments(self):
+        pays = [txn(f"T{i}", f"10-{i + 1:02d}", "out", 9500.0, "Testline Trading FZE", "IBAN ending 4242", "INV 40001",
+                    channel="swift") for i in range(1, 4)]
+        alert = {"alert_id": "A1", "rule_id": "TM03", "transaction_ids": [t["transaction_id"] for t in pays],
+                 "measured": {"limit_count": 2}}
+        return pays, alert
+
+    def test_one_invoice_row_cannot_explain_several_payments(self):
+        pays, alert = self.three_equal_payments()
+        inv = dated_doc("INV-1", "supplier_invoices", "**Supplier:** Testline Trading FZE\n\n"
+                        "| Invoice | Goods | Amount |\n|---|---|---|\n| INV 40001 | Spare parts | £9,500.00 |",
+                        "2026-09-30", "Invoices from Testline Trading FZE")
+        self.assertEqual(self.codes([alert], [inv], pays), [])
+
+    def test_one_invoice_without_a_table_cannot_explain_several_payments(self):
+        pays, alert = self.three_equal_payments()
+        inv = dated_doc("INV-1", "supplier_invoice", "**Supplier:** Testline Trading FZE\n**Invoice:** INV 40001\n"
+                        "**Amount:** £9,500.00", "2026-09-30", "Invoice INV 40001 from Testline Trading FZE")
+        self.assertEqual(self.codes([alert], [inv], pays), [])
+
+    def test_three_invoice_rows_for_three_payments_still_close(self):
+        pays, alert = self.three_equal_payments()
+        rows = "\n".join("| INV 40001 | Spare parts | £9,500.00 |" for _ in pays)
+        inv = dated_doc("INV-1", "supplier_invoices", "**Supplier:** Testline Trading FZE\n\n"
+                        "| Invoice | Goods | Amount |\n|---|---|---|\n" + rows, "2026-09-30",
+                        "Invoices from Testline Trading FZE")
+        self.assertEqual(self.codes([alert], [inv], pays), [("explains", "INVOICE_MATCHES")])
+
     def test_own_freight_invoices_may_be_issued_after_the_receipt_when_the_reference_matches(self):
         rec = txn("T1", "10-11", "in", 12216.28, "Testcote Exports Ltd", "35-30-06 29236070", "FREIGHT 10102")
         inv = dated_doc("INV-3", "freight_invoices", "| Invoice | Exporter | Amount |\n|---|---|---|\n"
@@ -624,6 +653,37 @@ class ThirdPartyDocumented(unittest.TestCase):
 
     def test_advice_for_another_client_explains_nothing(self):
         self.assertEqual(self.codes([self.TM08], [self.AGREEMENT, self.advice(client="Other Client Ltd")], [self.ADV]), [])
+
+
+class OneDocumentOneTransaction(unittest.TestCase):
+    """The rule behind Fedya's report, in every check that reads a document per transaction."""
+
+    def test_one_sale_receipt_cannot_explain_two_cash_deposits(self):
+        from tm.explainers import documented_event
+        cash = [txn(f"T{i}", f"06-{8 + i:02d}", "in", 1340.0, channel="cash_topup") for i in (1, 2)]
+        rec = dated_doc("SAL-1", "sale_receipt", "I, Pat Example, confirm the sale of one bike for £1,340.00 in cash.",
+                        "2026-06-08", "Sale receipt")
+        alert = {"alert_id": "A1", "rule_id": "TM05", "transaction_ids": ["T1", "T2"], "measured": {"limit_gbp": 1000}}
+        self.assertEqual(documented_event(own_bundle([alert], [rec], cash))[0], [])
+
+    def test_one_payment_cannot_be_refunded_twice(self):
+        from tm.explainers import refund
+        paid = txn("T0", "05-10", "out", 7400.0, "Testvale Hotel", "account ending 1234", "BOOKING 48151")
+        backs = [txn(f"T{i}", f"07-{19 + i:02d}", "in", 7400.0, "Testvale Hotel", "12-34-56 78901234",
+                     "REFUND BOOKING 48151") for i in (1, 2)]
+        mails = [dated_doc(f"EML-{i}", "venue_email", "We have refunded £7,400.00 for BOOKING 48151.", "2026-07-18",
+                           "Email from Testvale Hotel") for i in (1, 2)]
+        alert = {"alert_id": "A1", "rule_id": "TM06", "transaction_ids": ["T1", "T2"], "measured": {"limit_gbp": 5000}}
+        self.assertEqual(refund(own_bundle([alert], mails, [paid] + backs))[0], [])  # the second £7,400 is left over
+
+    def test_one_gift_letter_cannot_explain_two_gifts(self):
+        from tm.explainers import third_party_documented
+        gifts = [txn(f"T{i}", f"10-{17 + i:02d}", "in", 5000.0, "Jules Example", "54-08-00 80787746", "GIFT")
+                 for i in (1, 2)]
+        letter = dated_doc("GFT-1", "gift_letter", "I, Jules Example, give £5,000.00 to my child, Pat Example.",
+                           "2026-10-17", "Gift letter from Jules Example")
+        alert = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1", "T2"], "measured": {"limit_gbp": 1000}}
+        self.assertEqual(third_party_documented(own_bundle([alert], [letter], gifts))[0], [])
 
 
 if __name__ == "__main__":

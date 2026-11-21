@@ -458,8 +458,27 @@ def _vehicle_owned(b: CaseBundle, doc: Doc) -> bool | None:
     return False
 
 
-def _event_doc_for(b: CaseBundle, t: dict) -> Doc | None:
-    """A document about a one-off event that accounts for transaction t (see documented_event)."""
+def _amount_key(doc: Doc, t: dict) -> tuple:
+    return (doc.doc_id, round(t["amount_gbp"], 2))
+
+
+def _match_each_once(txns: list[dict], finder) -> dict:
+    """Run finder(t, used) over the transactions in booking order, so one document's amount backs one transaction:
+    a receipt for £X can't explain two deposits of £X. finder returns (result, key) or None."""
+    used: set = set()
+    found = {}
+    for t in sorted(txns, key=lambda t: (t.get("booked_at", ""), t["transaction_id"])):
+        hit = finder(t, used)
+        if hit:
+            result, key = hit
+            used.add(key)
+            found[t["transaction_id"]] = result
+    return found
+
+
+def _event_doc_for(b: CaseBundle, t: dict, used: set = frozenset()) -> Doc | None:
+    """A document about a one-off event that accounts for transaction t (see documented_event), not already used for
+    another transaction of the same amount."""
     customer = b.customer.get("name")
     td = _txn_date(t)
     if not td:
@@ -469,7 +488,7 @@ def _event_doc_for(b: CaseBundle, t: dict) -> Doc | None:
     if not cash and (not payer or same_name(payer, customer)):
         return None  # own-name money is own_account's business
     for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
-        if not _is_event_doc(doc):
+        if not _is_event_doc(doc) or _amount_key(doc, t) in used:
             continue
         dd = _doc_date(doc)
         if not dd or not 0 <= (td - dd).days <= EVENT_DOC_MAX_DAYS_BEFORE:
@@ -515,7 +534,8 @@ def documented_event(b: CaseBundle) -> Checks:
         if a.get("rule_id") not in ("TM01", "TM02", "TM05", "TM06", "TM07", "TM08"):
             continue
         txns = b.alert_txns(a)
-        found = {t["transaction_id"]: doc for t in txns for doc in [_event_doc_for(b, t)] if doc}
+        found = _match_each_once(txns, lambda t, used: (lambda d: (d, _amount_key(d, t)) if d else None)(
+            _event_doc_for(b, t, used)))
         if not found or not _own_covers(b, a, txns, found):
             continue
         parts = []
@@ -552,12 +572,14 @@ def _same_party(t: dict, e: dict) -> bool:
             or _same_account(t.get("counterparty_account"), e.get("counterparty_account")))
 
 
-def _twin(b: CaseBundle, t: dict) -> tuple[dict, dict] | None:
-    """(return, original): t and the closest transaction going the other way for the same amount with the same party.
-    t may be the return of an earlier payment, or the original of a later return."""
+def _twin(b: CaseBundle, t: dict, taken: set = frozenset()) -> tuple[dict, dict] | None:
+    """(return, original): t and the closest transaction going the other way for the same amount with the same party,
+    not already paired with another one (one payment is returned once). t may be the return of an earlier payment, or
+    the original of a later return."""
     best = None
     for e in b.txns.values():
-        if (e["transaction_id"] == t["transaction_id"] or e.get("direction") == t.get("direction")
+        if (e["transaction_id"] == t["transaction_id"] or e["transaction_id"] in taken
+                or e.get("direction") == t.get("direction")
                 or not _same_amount(e["amount_gbp"], t["amount_gbp"]) or not _same_party(t, e)):
             continue
         pair = (t, e) if e.get("booked_at", "") < t.get("booked_at", "") else (e, t)
@@ -577,9 +599,10 @@ def _covering_review(b: CaseBundle, e: dict, t: dict) -> dict | None:
     return None
 
 
-def _refund_doc(b: CaseBundle, t: dict, e: dict) -> Doc | None:
+def _refund_doc(b: CaseBundle, t: dict, e: dict, used: set = frozenset()) -> Doc | None:
     """A document written between the two payments that confirms the return: it states the amount and names the
-    reference number, the account or the (non-customer) party, and isn't addressed to someone else."""
+    reference number, the account or the (non-customer) party, and isn't addressed to someone else (nor already used
+    to confirm another return of the same amount)."""
     ed, td = _txn_date(e), _txn_date(t)
     refs = set(re.findall(r"\d{3,}", f"{t.get('reference') or ''} {e.get('reference') or ''}"))
     accts = [a for a in (t.get("counterparty_account"), e.get("counterparty_account")) if len(_digits(a)) >= 6]
@@ -588,7 +611,7 @@ def _refund_doc(b: CaseBundle, t: dict, e: dict) -> Doc | None:
         party = ""
     for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
         dd = _doc_date(doc)
-        if not dd or not ed or not td or not ed <= dd <= td:
+        if not dd or not ed or not td or not ed <= dd <= td or _amount_key(doc, t) in used:
             continue
         if not any(_same_amount(x, t["amount_gbp"]) for x in amounts(doc.text)) or _addressed_elsewhere(b, doc):
             continue
@@ -620,18 +643,20 @@ def refund(b: CaseBundle) -> Checks:
             continue
         txns = b.alert_txns(a)
         explained: dict[str, Doc] = {}
+        used_docs: set = set()
         pairs = []
-        for x in txns:
+        for x in sorted(txns, key=lambda t: (t.get("booked_at", ""), t["transaction_id"])):
             if x["transaction_id"] in explained:
                 continue
-            pair = _twin(b, x)
+            pair = _twin(b, x, set(explained))
             if not pair:
                 continue
             t, e = pair  # t returns e
-            doc = _refund_doc(b, t, e)
+            doc = _refund_doc(b, t, e, used_docs)
             review = _covering_review(b, e, t)
             if not doc or (_is_cash_in(t) and not (review and re.search(r"withdr", review.get("note", ""), re.I))):
                 continue
+            used_docs.add(_amount_key(doc, t))
             explained[t["transaction_id"]] = doc
             explained[e["transaction_id"]] = doc
             pairs.append((t, e, doc, review))
@@ -682,18 +707,25 @@ def _invoice_contradicts(b: CaseBundle, doc: Doc, t: dict) -> bool:
 
 
 def _units(doc: Doc) -> list[tuple[str, date | None]]:
-    """What can match one transaction: each table row (with its own date if it has one), then the whole document."""
+    """What can match one transaction: each table row (with its own date if it has one), then the text outside the
+    tables. The last unit leaves the table rows out, so a row's amount is never counted a second time through it."""
     out = []
     for rows in _tables(doc):
         for r in rows:
             text = " | ".join(r.values())
             out.append((text, next((d for d in (parse_date(v) for v in r.values()) if d), None)))
-    out.append((doc.text, None))
+    out.append(("\n".join(line for line in doc.text.splitlines() if not line.strip().startswith("|")), None))
     return out
 
 
-def _invoice_unit_for(b: CaseBundle, t: dict, used: set[tuple[str, int]]) -> tuple[Doc, int] | None:
-    """A document (or one of its table rows) that matches t on amount, party, reference number and date."""
+def _unit_key(doc: Doc, i: int, n_units: int, t: dict) -> tuple:
+    """What a match uses up: a table row once; outside the tables, one transaction per amount the document states."""
+    return (doc.doc_id, i) if i < n_units - 1 else (doc.doc_id, "text", round(t["amount_gbp"], 2))
+
+
+def _invoice_unit_for(b: CaseBundle, t: dict, used: set[tuple]) -> tuple[Doc, tuple] | None:
+    """A document (or one of its table rows) that matches t on amount, party, reference number and date, and that no
+    other transaction of the alert has used. Returns the document and the key of what it used up."""
     td = _txn_date(t)
     party = _party(t.get("counterparty_name"))
     if not td or not party or same_name(party, b.customer.get("name")):
@@ -703,8 +735,10 @@ def _invoice_unit_for(b: CaseBundle, t: dict, used: set[tuple[str, int]]) -> tup
         if not _is_invoice_doc(doc) or _invoice_contradicts(b, doc, t):
             continue
         header = f"{doc.title}\n" + "\n".join(doc.fields.values())
-        for i, (text, row_date) in enumerate(_units(doc)):
-            if (doc.doc_id, i) in used or not any(_same_amount(x, t["amount_gbp"]) for x in amounts(text)):
+        units = _units(doc)
+        for i, (text, row_date) in enumerate(units):
+            key = _unit_key(doc, i, len(units), t)
+            if key in used or not any(_same_amount(x, t["amount_gbp"]) for x in amounts(text)):
                 continue
             if not (_mentioned(party, text) or _mentioned(party, header)):
                 continue
@@ -716,7 +750,7 @@ def _invoice_unit_for(b: CaseBundle, t: dict, used: set[tuple[str, int]]) -> tup
             gap = (td - ud).days
             grace = INVOICE_RECEIPT_GRACE_DAYS if t.get("direction") == "in" and refs and all(r in text for r in refs) else 0
             if -grace <= gap <= INVOICE_MAX_DAYS_BEFORE:
-                return doc, i
+                return doc, key
     return None
 
 
@@ -731,14 +765,13 @@ def invoice_matches(b: CaseBundle) -> Checks:
         if a.get("rule_id") not in ("TM01", "TM02", "TM03", "TM04", "TM06", "TM08"):
             continue
         txns = b.alert_txns(a)
-        used: set[tuple[str, int]] = set()
+        used: set[tuple] = set()  # each table row, and each amount stated outside the tables, backs one transaction
         found: dict[str, Doc] = {}
         for t in sorted(txns, key=lambda t: (t.get("booked_at", ""), t["transaction_id"])):
             hit = _invoice_unit_for(b, t, used)
             if hit:
-                doc, i = hit
-                if i < len(_units(doc)) - 1:  # a table row is used once; a whole document may back several rows
-                    used.add((doc.doc_id, i))
+                doc, key = hit
+                used.add(key)
                 found[t["transaction_id"]] = doc
         if not found or not _own_covers(b, a, txns, found):
             continue
@@ -777,11 +810,12 @@ def _kind(doc: Doc, *words: str) -> bool:
     return any(w in (doc.type or "").lower() for w in words)
 
 
-def _gift_doc_for(b: CaseBundle, t: dict, payer: str) -> Doc | None:
-    """A gift letter from the payer to the customer for this amount, written shortly before the money arrived."""
+def _gift_doc_for(b: CaseBundle, t: dict, payer: str, used: set = frozenset()) -> Doc | None:
+    """A gift letter from the payer to the customer for this amount, written shortly before the money arrived (and not
+    already used for another gift of the same amount)."""
     td = _txn_date(t)
     for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
-        if not _kind(doc, "gift"):
+        if not _kind(doc, "gift") or _amount_key(doc, t) in used:
             continue
         dd = _doc_date(doc)
         if not dd or not td or not 0 <= (td - dd).days <= EVENT_DOC_MAX_DAYS_BEFORE:
@@ -795,15 +829,17 @@ def _gift_doc_for(b: CaseBundle, t: dict, payer: str) -> Doc | None:
     return None
 
 
-def _advance_docs_for(b: CaseBundle, t: dict, payer: str) -> list[Doc] | None:
+def _advance_docs_for(b: CaseBundle, t: dict, payer: str, used: set = frozenset()) -> list[Doc] | None:
     """An invoice-finance advance: an agreement with the payer, and the payer's remittance advice to the customer stating
-    this amount; if the advice gives the financed total and the agreement the advance rate, total x rate = the credit."""
+    this amount (each advice backs one advance); if the advice gives the financed total and the agreement the advance
+    rate, total x rate = the credit."""
     td = _txn_date(t)
     agreements = [d for d in b.docs.values() if _kind(d, "factoring", "finance")
                   and _mentioned(payer, f"{d.title}\n{d.text}") and (_doc_date(d) or date.max) <= td]
     for adv in sorted(b.docs.values(), key=lambda d: d.doc_id):
         dd = _doc_date(adv)
-        if (not _kind(adv, "remittance") or not dd or not 0 <= (td - dd).days <= REMITTANCE_MAX_DAYS_BEFORE
+        if (not _kind(adv, "remittance") or _amount_key(adv, t) in used
+                or not dd or not 0 <= (td - dd).days <= REMITTANCE_MAX_DAYS_BEFORE
                 or not _mentioned(payer, f"{adv.title}\n{adv.text}") or _addressed_elsewhere(b, adv)):
             continue
         figures = amounts(adv.text)
@@ -828,15 +864,15 @@ def third_party_documented(b: CaseBundle) -> Checks:
         if a.get("rule_id") not in ("TM01", "TM02", "TM08"):
             continue
         txns = b.alert_txns(a)
-        found: dict[str, list[Doc]] = {}
-        for t in txns:
+        def finder(t: dict, used: set):
             payer = _party(t.get("counterparty_name"))
             if t.get("direction") != "in" or not payer or same_name(payer, customer):
-                continue
-            gift = _gift_doc_for(b, t, payer)
-            docs = [gift] if gift else _advance_docs_for(b, t, payer)
-            if docs:
-                found[t["transaction_id"]] = docs
+                return None
+            gift = _gift_doc_for(b, t, payer, used)
+            docs = [gift] if gift else _advance_docs_for(b, t, payer, used)
+            return (docs, _amount_key(docs[-1], t)) if docs else None  # the letter / the advice is used up
+
+        found: dict[str, list[Doc]] = _match_each_once(txns, finder)
         if not found or not _own_covers(b, a, txns, {k: v[0] for k, v in found.items()}):
             continue
         parts = []
