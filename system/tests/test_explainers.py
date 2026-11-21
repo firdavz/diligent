@@ -110,10 +110,112 @@ class BusinessRecords(unittest.TestCase):
         txns = [{**t, "channel": "faster_payment"} for t in TOPUPS]
         self.assertEqual(self.codes(bundle([tm03(txns)], [takings(GOOD_ROWS)], txns)), [])
 
-    def test_explainers_entry_point_runs(self):
+    def test_explainers_entry_point_runs_business_records(self):
         s, q = explainers(bundle([tm03(TOPUPS)], [takings(GOOD_ROWS)], TOPUPS))
         self.assertEqual([x.code for x in s], ["BUSINESS_RECORDS_RECONCILE"])
         self.assertEqual(q, [])
+
+
+POLICY = {"own_account_rfi_multiple": 5, "rules": {"TM02": {"amounts": [2000.0]}}}
+
+
+def xfer(tid, day, direction, amount, account, name="Pat Example", channel="faster_payment"):
+    return {"transaction_id": tid, "booked_at": f"2026-05-{day:02d}T10:00:00Z", "direction": direction,
+            "channel": channel, "amount_gbp": amount, "counterparty_name": name, "counterparty_account": account}
+
+
+def statement(doc_id, holder, account, text):
+    return doc(doc_id, "bank_statement",
+               f"**Account holder:** {holder}\n**Bank:** Testbank\n**Account:** {account}\n\n{text}")
+
+
+def own_bundle(alerts, docs, txns, customer=None):
+    b = bundle(alerts, docs, txns, customer)
+    b.policy = POLICY
+    return b
+
+
+def tm01(txns, received, baseline, multiple, limit=3):
+    return {"alert_id": "A1", "rule_id": "TM01", "transaction_ids": [t["transaction_id"] for t in txns],
+            "measured": {"received_gbp": received, "baseline_gbp": baseline, "multiple": multiple,
+                         "limit_multiple": limit}}
+
+
+class OwnAccount(unittest.TestCase):
+    def codes(self, b):
+        from tm.explainers import own_account
+        return [(s.kind, s.code) for s in own_account(b)[0]]
+
+    IN = xfer("T1", 7, "in", 4200.0, "11-22-33 44556677")
+    OUT = xfer("T2", 8, "out", 4200.0, "99-88-77 66554433")
+    SMALL = xfer("T3", 6, "in", 150.0, None)
+    SRC = statement("STM-1", "Pat Example", "11-22-33 44556677", "7 May 2026: transfer of £4,200.00 out.")
+    DST = statement("STM-2", "Pat Example", "99-88-77 66554433", "8 May 2026: £4,200.00 received.")
+
+    def tm02(self, txns):
+        return {"alert_id": "A1", "rule_id": "TM02", "transaction_ids": [t["transaction_id"] for t in txns],
+                "measured": {}}
+
+    def test_tm02_in_and_out_both_own_accounts_closes(self):
+        txns = [self.SMALL, self.IN, self.OUT]
+        b = own_bundle([self.tm02(txns)], [self.SRC, self.DST], txns)
+        self.assertEqual(self.codes(b), [("explains", "OWN_ACCOUNT")])
+
+    def test_tm02_destination_not_documented_explains_nothing(self):
+        txns = [self.SMALL, self.IN, self.OUT]
+        self.assertEqual(self.codes(own_bundle([self.tm02(txns)], [self.SRC], txns)), [])
+
+    def test_statement_in_someone_elses_name_explains_nothing(self):
+        txns = [self.IN, self.OUT]
+        other = statement("STM-2", "Robin Other", "99-88-77 66554433", "8 May 2026: £4,200.00 received.")
+        self.assertEqual(self.codes(own_bundle([self.tm02(txns)], [self.SRC, other], txns)), [])
+
+    def test_statement_for_a_different_account_number_explains_nothing(self):
+        txns = [self.IN, self.OUT]
+        wrong = statement("STM-2", "Pat Example", "99-88-77 66554400", "8 May 2026: £4,200.00 received.")
+        self.assertEqual(self.codes(own_bundle([self.tm02(txns)], [self.SRC, wrong], txns)), [])
+
+    def test_statement_amount_differs_explains_nothing(self):
+        txns = [self.IN, self.OUT]
+        wrong = statement("STM-2", "Pat Example", "99-88-77 66554433", "8 May 2026: £4,100.00 received.")
+        self.assertEqual(self.codes(own_bundle([self.tm02(txns)], [self.SRC, wrong], txns)), [])
+
+    def test_tm02_large_third_party_money_left_over_explains_nothing(self):
+        other = xfer("T4", 7, "in", 2500.0, "12-12-12 12121212", name="Robin Other")
+        txns = [self.IN, self.OUT, other]
+        self.assertEqual(self.codes(own_bundle([self.tm02(txns)], [self.SRC, self.DST], txns)), [])
+
+    def test_tm01_below_five_times_closes(self):
+        txns = [self.SMALL, self.IN]
+        b = own_bundle([tm01(txns, 4350.0, 1400.0, 3.11)], [self.SRC], txns)
+        self.assertEqual(self.codes(b), [("explains", "OWN_ACCOUNT")])
+
+    def test_tm01_at_or_above_five_times_asks_for_updated_profile(self):
+        txns = [self.SMALL, self.IN]
+        b = own_bundle([tm01(txns, 4350.0, 870.0, 5.0)], [self.SRC], txns)
+        self.assertEqual(self.codes(b), [("partial", "RFI_UPDATED_PROFILE")])
+
+    def test_tm01_still_over_profile_without_the_own_money_explains_nothing(self):
+        salary = xfer("T5", 1, "in", 5000.0, "55-55-55 55555555", name="Employer Ltd")
+        txns = [salary, self.IN]
+        b = own_bundle([tm01(txns, 9200.0, 1400.0, 4.0)], [self.SRC], txns)  # 5,000 left > 3 x 1,400
+        self.assertEqual(self.codes(b), [])
+
+    def test_account_ending_matches_and_joint_holders_count(self):
+        t = xfer("T1", 7, "in", 4200.0, "account ending 6677", name="P & R Example")
+        joint = doc("STM-1", "bank_statement",
+                    "**Account holders:** Pat Example and Robin Example\n**Account:** 11-22-33 44556677\n\n"
+                    "7 May 2026: transfer of £4,200.00.")
+        alert = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1"], "measured": {"limit_gbp": 1000}}
+        from tm.explainers import own_account
+        s = own_account(own_bundle([alert], [joint], [t]))[0]
+        self.assertEqual([(x.kind, x.code) for x in s], [("explains", "OWN_ACCOUNT")])
+        self.assertIn("jointly held by Pat Example and Robin Example", s[0].facts)
+
+    def test_other_rules_are_not_explained_by_own_account(self):
+        txns = [self.IN]
+        alert = {"alert_id": "A1", "rule_id": "TM07", "transaction_ids": ["T1"], "measured": {}}
+        self.assertEqual(self.codes(own_bundle([alert], [self.SRC], txns)), [])
 
 
 if __name__ == "__main__":
