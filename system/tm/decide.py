@@ -23,12 +23,12 @@ FALLBACK: dict[str, tuple[str, str]] = {
     "TM01": ("RFI_SOURCE_OF_FUNDS", "Ask the customer for proof of where the money received in the window came from."),
     "TM02": ("ESC_UNEXPLAINED_FUNDS", "Nothing on file explains the money that came in and was moved straight out again."),
     "TM03": ("ESC_STRUCTURING", "Nothing on file explains the repeated amounts just under the threshold."),
-    "TM04": ("ESC_MULE_ACTIVITY", "Nothing on file explains why so many different parties paid or were paid by the account."),
+    "TM04": ("RFI_PURPOSE_DOCUMENTS", "Ask the customer for documents showing why so many different parties paid or were paid by the account."),
     "TM05": ("RFI_SOURCE_OF_FUNDS", "Ask the customer for proof of where the cash came from."),
     "TM06": ("ESC_HIGH_RISK_CORRIDOR", "Nothing on file explains the payments involving an undeclared higher-risk country."),
     "TM07": ("RFI_SOURCE_OF_FUNDS", "Ask the customer where the money moving on the reactivated account came from."),
-    "TM08": ("ESC_THIRD_PARTY_FUNDING", "Nothing on file explains the third party funding or receiving money from the account."),
-    "TM10": ("ESC_EARLY_REDEMPTION", "Nothing on file explains why fund units were bought and quickly sold back."),
+    "TM08": ("RFI_SOURCE_OF_FUNDS", "Ask the customer who the third party is and for proof of where the money came from."),
+    "TM10": ("RFI_PURPOSE_DOCUMENTS", "Ask the customer why the fund units were sold back so soon after they were bought."),
     "TM22": ("RFI_COUNTERPARTY_DETAILS", "Nothing on file settles whether the counterparty is the listed party; ask the customer who the counterparty is and what the payment was for."),
 }
 _DEFAULT_FALLBACK = ("ESC_UNEXPLAINED_FUNDS", "Nothing on file explains the activity the alert raised.")

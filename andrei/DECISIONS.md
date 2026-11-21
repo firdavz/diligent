@@ -319,6 +319,25 @@ Teammates: keep your own notes in a folder named after you, like this one.
 - **No possible wrongful closes on 514 unseen cases.** Payments and FX has risen from 32% to 61% with the latest
   explainers and is still the weakest. These are model labels (silver), reported apart from the human labels.
 
+## D28 — Fallbacks for TM04, TM08, TM10 become RFI (over-escalation was the main error)
+- Precision and recall before the change (human labels, 226 cases): accuracy 76%; CLOSE precision 100% / recall 76%;
+  RFI 82% / 53%; ESCALATE 55% / 100%. Silver (514 unseen): accuracy 83%; CLOSE 100% / 81%; RFI 91% / 68%;
+  ESCALATE 63% / 100%. Errors are all on the safe side; **every over-escalation on the human labels (61 alerts) came
+  from the ESCALATE fallbacks in `decide.FALLBACK`**, i.e. "nothing explains it and no red flag fired".
+- The SOP: RFI when "there is no suspicion yet, and one specific document or answer would settle the case". Lorenzo's
+  checks now raise explicit red flags for real crime patterns, so "no red flag" is closer to "no suspicion yet".
+- Tested three variants:
+
+  | Variant | Human: accuracy / cost saved | Silver: accuracy / cost saved | Missed escalations |
+  |---|---|---|---|
+  | Before | 76% / 70% | 83% / 78% | 0 |
+  | TM02, TM03, TM04, TM08, TM10 → RFI | 88% / 82% | 87% / 81% | 16 |
+  | **TM04, TM08, TM10 → RFI** (kept) | **82% / 76%** | **86% / 81%** | **1** |
+
+- TM02 and TM03 stay ESCALATE until three red-flag gaps are closed (Lorenzo): bank TM01+TM02+TM05 student cash with
+  contradictory sources sent abroad; payments and FX TM03 sub-£10k splits with a staff note about the invoice limit;
+  bank TM01+TM02 consulting pass-through. Once they raise their own red flags, TM02/TM03 can move to RFI too (+6 points).
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
