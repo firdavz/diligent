@@ -725,6 +725,66 @@ class CollectionDocumented(unittest.TestCase):
         self.assertEqual(self.codes([], ins, out), [])
 
 
+class GroupCompany(unittest.TestCase):
+    CUSTOMER = {"name": "Testmore Electronics Ltd", "kind": "business"}
+    IN = txn("T1", "10-13", "in", 50400.0, "Sister Trading Ltd", "78-60-01 75113601", "INTERCOMPANY")
+    TM08 = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1"], "measured": {"limit_gbp": 1000}}
+
+    def chart(self, rows):
+        body = "| Company | Owner | Share |\n|---|---|---|\n" + "\n".join(f"| {c} | {o} | {s} |" for c, o, s in rows)
+        return dated_doc("GRP-1", "group_structure", body, "2026-03-29", "Group structure chart")
+
+    def register(self, psc):
+        return dated_doc("INC-1", "company_register_extract", f"**Company:** Testmore Electronics Ltd\n\n"
+                         f"| Person with significant control | Control |\n|---|---|\n| {psc} | Owns 75% or more of shares |",
+                         "2023-10-18", "Company register extract")
+
+    def run_group(self, alerts, docs, txns, held=None):
+        from tm.explainers import group_company
+        b = own_bundle(alerts, docs, txns, customer=self.CUSTOMER)
+        if held:
+            b.case["held_payment_id"] = held
+        return group_company(b)[0]
+
+    SISTERS = [("Testmore Electronics Ltd", "Harper Owner", "100%"), ("Sister Trading Ltd", "Harper Owner", "100%")]
+
+    def test_sister_company_with_the_same_owner_closes(self):
+        s = self.run_group([self.TM08], [self.chart(self.SISTERS), self.register("Harper Owner")], [self.IN])
+        self.assertEqual([x.code for x in s], ["GROUP_COMPANY"])
+        self.assertIn("both controlled by Harper Owner", s[0].facts)
+
+    def test_parent_holding_company_closes(self):
+        rows = [("Testmore Electronics Ltd", "Sister Trading Ltd", "100%"), ("Sister Trading Ltd", "Riley Owner", "100%")]
+        s = self.run_group([self.TM08], [self.chart(rows), self.register("Riley Owner")], [self.IN])
+        self.assertEqual([x.code for x in s], ["GROUP_COMPANY"])
+
+    def test_share_below_control_explains_nothing(self):
+        rows = [("Testmore Electronics Ltd", "Harper Owner", "100%"), ("Sister Trading Ltd", "Harper Owner", "40%")]
+        self.assertEqual(self.run_group([self.TM08], [self.chart(rows)], [self.IN]), [])
+
+    def test_different_owners_explain_nothing(self):
+        rows = [("Testmore Electronics Ltd", "Harper Owner", "100%"), ("Sister Trading Ltd", "Someone Else", "100%")]
+        self.assertEqual(self.run_group([self.TM08], [self.chart(rows)], [self.IN]), [])
+
+    def test_register_naming_another_controller_contradicts_the_chart(self):
+        docs = [self.chart(self.SISTERS), self.register("Unknown Person")]
+        self.assertEqual(self.run_group([self.TM08], docs, [self.IN]), [])
+
+    def test_held_payment_with_its_invoice_is_also_reported_as_invoice_matches(self):
+        held = txn("T2", "10-14", "out", 46366.99, "Supplier Trading Co", "IBAN ending 4153", "INV 76835", channel="swift")
+        inv = dated_doc("INV-1", "supplier_invoice", "**Buyer:** Testmore Electronics Ltd\n**Amount:** £46,366.99\n"
+                        "**Pay to:** IBAN ending 4153", "2026-10-11", "Invoice INV 76835 from Supplier Trading Co")
+        alert = {"alert_id": "A1", "rule_id": "TM02", "transaction_ids": ["T1", "T2"], "measured": {}}
+        third_party = {**POLICY, "rules": {"TM02": {"amounts": [2000.0], "fires_when":
+                       "80% of the money received from anyone other than the client is paid out"}}}
+        from tm.explainers import group_company
+        b = own_bundle([alert], [self.chart(self.SISTERS), inv], [self.IN, held], customer=self.CUSTOMER)
+        b.policy, b.case["held_payment_id"] = third_party, "T2"
+        self.assertEqual([x.code for x in group_company(b)[0]], ["GROUP_COMPANY", "INVOICE_MATCHES"])
+        b.docs = {"GRP-1": self.chart(self.SISTERS)}  # no invoice: the group money is explained, the held payment isn't
+        self.assertEqual([x.code for x in group_company(b)[0]], ["GROUP_COMPANY"])
+
+
 class OneDocumentOneTransaction(unittest.TestCase):
     """The rule behind Fedya's report, in every check that reads a document per transaction."""
 

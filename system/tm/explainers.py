@@ -1034,9 +1034,132 @@ def collection_documented(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- GROUP_COMPANY
+
+GROUP_CONTROL_SHARE = 75.0  # the register's own control threshold ("owns 75% or more of shares")
+
+
+def _group_chart(b: CaseBundle) -> tuple[Doc, dict[str, tuple[str, float]]] | None:
+    """A group structure table on file: company -> (owner, share %). Read from any table with company/owner/share
+    columns (the content, not the document's type)."""
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        owners: dict[str, tuple[str, float]] = {}
+        for rows in _tables(doc):
+            for r in rows:
+                company = next((v for k, v in r.items() if k == "company"), "")
+                owner = next((v for k, v in r.items() if k.startswith("owne")), "")
+                share = next((v for k, v in r.items() if "share" in k or k == "%"), "")
+                pct = re.search(r"(\d{1,3}(?:\.\d+)?)\s?%", share)
+                if company and owner and pct:
+                    owners[name_key(company)] = (owner, float(pct[1]))
+        if owners:
+            return doc, owners
+    return None
+
+
+def _chain(owners: dict[str, tuple[str, float]], company: str) -> list[str]:
+    """company, its controlling owner, that owner's controlling owner... (links below the control share stop it)."""
+    out, seen = [company], set()
+    while name_key(out[-1]) in owners and name_key(out[-1]) not in seen and len(out) < 6:
+        seen.add(name_key(out[-1]))
+        owner, pct = owners[name_key(out[-1])]
+        if pct < GROUP_CONTROL_SHARE:
+            break
+        out.append(owner)
+    return out
+
+
+def _register_controllers(b: CaseBundle) -> list[str]:
+    """People the customer's company register names as having significant control."""
+    out = []
+    for doc in b.docs.values():
+        for rows in _tables(doc):
+            for r in rows:
+                person = next((v for k, v in r.items() if "significant control" in k), "")
+                if person and same_name(doc.fields.get("company"), b.customer.get("name")):
+                    out.append(person)
+    return out
+
+
+def _same_group(b: CaseBundle, owners: dict[str, tuple[str, float]], payer: str) -> str | None:
+    """How the payer and the customer are in one group (None if they aren't): one controls the other, or both have
+    the same ultimate controller. The customer's register controllers must appear in its chain, or it contradicts."""
+    customer = b.customer.get("name", "")
+    mine, theirs = _chain(owners, customer), _chain(owners, payer)
+    if len(mine) == 1 and len(theirs) == 1:
+        return None  # neither is in the chart with a controlling owner
+    controllers = _register_controllers(b)
+    if controllers and not any(same_name(c, x) for c in controllers for x in mine[1:]):
+        return None  # the register names a controller the chart doesn't show
+    if any(same_name(payer, x) for x in mine[1:]):
+        return f"{payer} controls {customer}"
+    if any(same_name(customer, x) for x in theirs[1:]):
+        return f"{customer} controls {payer}"
+    if len(mine) > 1 and len(theirs) > 1 and same_name(mine[-1], theirs[-1]):
+        return f"{payer} and {customer} are both controlled by {mine[-1]}"
+    return None
+
+
+def group_company(b: CaseBundle) -> Checks:
+    """Money from a verified company in the same group: a group structure on file shows the payer controls the
+    customer, is controlled by it, or shares its ultimate owner (each link at or above the control share), consistent
+    with the company register. Payments out that the same alert holds are matched to their invoices; a held payment so
+    matched is also reported as INVOICE_MATCHES, which the payments-and-FX invoice rule needs."""
+    signals: list[Signal] = []
+    chart = _group_chart(b)
+    if not chart:
+        return signals, []
+    chart_doc, owners = chart
+    customer = b.customer.get("name")
+    for a in b.alerts:
+        if a.get("rule_id") not in ("TM01", "TM02", "TM08"):
+            continue
+        txns = b.alert_txns(a)
+        group_in: dict[str, Doc] = {}
+        why = ""
+        for t in txns:
+            payer = _party(t.get("counterparty_name"))
+            if t.get("direction") == "in" and payer and not same_name(payer, customer):
+                how = _same_group(b, owners, payer)
+                if how:
+                    group_in[t["transaction_id"]] = chart_doc
+                    why = why or how
+        if not group_in:
+            continue
+        invoiced = _match_each_once([t for t in txns if t.get("direction") == "out"],
+                                    lambda t, used: _invoice_unit_for(b, t, used))
+        explained = {**group_in, **invoiced}
+        if not _own_covers(b, a, txns, explained):
+            continue
+        ins = [t for t in txns if t["transaction_id"] in group_in]
+        support = [d.doc_id for d in sorted(b.docs.values(), key=lambda d: d.doc_id)
+                   if d.doc_id != chart_doc.doc_id and not _is_invoice_doc(d)
+                   and any(_mentioned(_party(t.get("counterparty_name")), d.text) for t in ins)]
+        facts = (f"{chart_doc.doc_id} ({chart_doc.title}) shows {why}, so "
+                 + " and ".join(f"the {money(t['amount_gbp'])} received from {_party(t.get('counterparty_name'))} on "
+                                f"{fmt_date(_txn_date(t))} ({t['transaction_id']})" for t in ins)
+                 + " came from a company in the customer's own group.")
+        signals.append(Signal(
+            alert_id=a["alert_id"], kind="explains", code="GROUP_COMPANY", facts=facts,
+            evidence=list(dict.fromkeys([chart_doc.doc_id] + support + sorted(group_in))), strength="hard",
+            source="explainers.group_company",
+        ))
+        held = b.case.get("held_payment_id")
+        if held in invoiced:
+            t = b.txns[held]
+            doc = invoiced[held]
+            signals.append(Signal(
+                alert_id=a["alert_id"], kind="explains", code="INVOICE_MATCHES",
+                facts=(f"{doc.doc_id} ({doc.title}) matches the held payment of {money(t['amount_gbp'])} to "
+                       f"{_party(t.get('counterparty_name'))} ({held}) on amount, payee and reference."),
+                evidence=[doc.doc_id, held], strength="hard", source="explainers.group_company",
+            ))
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Next: group_company (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
+# Next: RFI twins for missing documents, TM10 redundancy (DOCUMENTED_EVENT) (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
 # third_party_documented, own account on payments and FX (outgoing own-account transfer; needs a team decision).
 # list_match_different_party is Lorenzo's (red_flags.listed_party).
 CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches,
-                third_party_documented, collection_documented]
+                third_party_documented, collection_documented, group_company]
