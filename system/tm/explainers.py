@@ -767,8 +767,100 @@ def invoice_matches(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- THIRD_PARTY_DOCUMENTED
+
+REMITTANCE_MAX_DAYS_BEFORE = 7
+_GIVER = re.compile(r"\bI,\s*([^,]+),")
+
+
+def _kind(doc: Doc, *words: str) -> bool:
+    return any(w in (doc.type or "").lower() for w in words)
+
+
+def _gift_doc_for(b: CaseBundle, t: dict, payer: str) -> Doc | None:
+    """A gift letter from the payer to the customer for this amount, written shortly before the money arrived."""
+    td = _txn_date(t)
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        if not _kind(doc, "gift"):
+            continue
+        dd = _doc_date(doc)
+        if not dd or not td or not 0 <= (td - dd).days <= EVENT_DOC_MAX_DAYS_BEFORE:
+            continue
+        m = _GIVER.search(doc.text)
+        giver = m[1].strip() if m else re.sub(r"^.*\bfrom\s+", "", doc.title or "", flags=re.I)
+        if not same_name(giver, payer) or not _mentioned(b.customer.get("name", ""), doc.text):
+            continue
+        if any(_same_amount(x, t["amount_gbp"]) for x in amounts(doc.text)) and not _addressed_elsewhere(b, doc):
+            return doc
+    return None
+
+
+def _advance_docs_for(b: CaseBundle, t: dict, payer: str) -> list[Doc] | None:
+    """An invoice-finance advance: an agreement with the payer, and the payer's remittance advice to the customer stating
+    this amount; if the advice gives the financed total and the agreement the advance rate, total x rate = the credit."""
+    td = _txn_date(t)
+    agreements = [d for d in b.docs.values() if _kind(d, "factoring", "finance")
+                  and _mentioned(payer, f"{d.title}\n{d.text}") and (_doc_date(d) or date.max) <= td]
+    for adv in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        dd = _doc_date(adv)
+        if (not _kind(adv, "remittance") or not dd or not 0 <= (td - dd).days <= REMITTANCE_MAX_DAYS_BEFORE
+                or not _mentioned(payer, f"{adv.title}\n{adv.text}") or _addressed_elsewhere(b, adv)):
+            continue
+        figures = amounts(adv.text)
+        if not any(_same_amount(x, t["amount_gbp"]) for x in figures):
+            continue
+        for agr in sorted(agreements, key=lambda d: d.doc_id):
+            rates = [float(r) for r in re.findall(r"(\d{1,3}(?:\.\d+)?)\s?%", f"{agr.text}\n{adv.text}")]
+            totals = [x for x in figures if x > t["amount_gbp"]]
+            if rates and totals and not any(abs(x * r / 100 - t["amount_gbp"]) <= 0.01 for x in totals for r in rates):
+                continue  # the advice's own arithmetic doesn't give this credit
+            return [agr, adv]
+    return None
+
+
+def third_party_documented(b: CaseBundle) -> Checks:
+    """A documented relationship explains money from a third party: a gift letter from the payer to the customer for
+    the amount, or an invoice-finance advance backed by the agreement and the remittance advice. Red flags about the
+    payer (a listed party, a fraud report) still win in decide()."""
+    signals: list[Signal] = []
+    customer = b.customer.get("name")
+    for a in b.alerts:
+        if a.get("rule_id") not in ("TM01", "TM02", "TM08"):
+            continue
+        txns = b.alert_txns(a)
+        found: dict[str, list[Doc]] = {}
+        for t in txns:
+            payer = _party(t.get("counterparty_name"))
+            if t.get("direction") != "in" or not payer or same_name(payer, customer):
+                continue
+            gift = _gift_doc_for(b, t, payer)
+            docs = [gift] if gift else _advance_docs_for(b, t, payer)
+            if docs:
+                found[t["transaction_id"]] = docs
+        if not found or not _own_covers(b, a, txns, {k: v[0] for k, v in found.items()}):
+            continue
+        parts = []
+        for t in txns:
+            docs = found.get(t["transaction_id"])
+            if not docs:
+                continue
+            payer = _party(t.get("counterparty_name"))
+            what = (f"a gift from {payer} to {customer}" if _kind(docs[0], "gift")
+                    else f"an invoice-finance advance from {payer} under its agreement")
+            parts.append(f"{' and '.join(d.doc_id for d in docs)} document{'s' if len(docs) == 1 else ''} the "
+                         f"{money(t['amount_gbp'])} received on {fmt_date(_txn_date(t))} ({t['transaction_id']}) as {what}")
+        evidence = [d.doc_id for v in found.values() for d in v] + sorted(found)
+        signals.append(Signal(
+            alert_id=a["alert_id"], kind="explains", code="THIRD_PARTY_DOCUMENTED",
+            facts="; ".join(parts) + ", for the same amount.",
+            evidence=list(dict.fromkeys(evidence)), strength="hard", source="explainers.third_party_documented",
+        ))
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Next: third_party_documented (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
+# Next: collection_documented, group_company (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
 # third_party_documented, own account on payments and FX (outgoing own-account transfer; needs a team decision).
 # list_match_different_party is Lorenzo's (red_flags.listed_party).
-CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches]
+CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches,
+                third_party_documented]

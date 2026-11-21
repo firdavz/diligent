@@ -9,8 +9,8 @@ payments 22, investment 0). Everything else fell back to RFI/ESCALATE, so explai
 
 ## Status (updated after each check)
 
-`CHECKS = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches]` on
-`track1-alert-closing`
+`CHECKS = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches,
+third_party_documented]` on `track1-alert-closing`
 (PR #1 merged; the `clotilde` branch is retired).
 
 | Check → code | Rules | Close when (all hold) | Commit |
@@ -20,7 +20,8 @@ payments 22, investment 0). Everything else fell back to RFI/ESCALATE, so explai
 | `returning_customer` → `RETURNING_CUSTOMER` | TM07 | "re-verified on <date>" inside the dormant period and on/before the reactivation + the money came from a statement-proven own account; the rest moved < the alert's limit | ✅ pushed |
 | `documented_event` → `DOCUMENTED_EVENT` | TM01, TM02, TM05, TM06, TM07, TM08 | an event letter / receipt / completion statement states the amount to the penny, names the payer, is dated 0–30 days before, carries the reference number, isn't addressed to someone else; cash: the customer is the seller (and owned the vehicle) | ✅ pushed |
 | `refund` → `REFUND_OF_EARLIER_PAYMENT` | TM01, TM02, TM05, TM06, TM07, TM08 | a transaction going the other way for the same amount with the same party (cash: withdrawal then deposit), before or after; a document written between the two states the amount and names the reference, account or party; cash also needs an earlier review written in between that covers the withdrawal | ✅ pushed |
-| `invoice_matches` → `INVOICE_MATCHES` | TM01, TM02, TM03, TM04, TM06, TM08 | an invoice / contract / schedule row / payment-file row has the amount, names the counterparty, carries the reference number, is dated 0–90 days before a payment (receipts: up to 7 days after if the row has the reference), names no other buyer or pay-to account; TM03 needs every payment matched, TM04 the parties left within the limit | this commit |
+| `invoice_matches` → `INVOICE_MATCHES` | TM01, TM02, TM03, TM04, TM06, TM08 | an invoice / contract / schedule row / payment-file row has the amount, names the counterparty, carries the reference number, is dated 0–90 days before a payment (receipts: up to 7 days after if the row has the reference), names no other buyer or pay-to account; TM03 needs every payment matched, TM04 the parties left within the limit | ✅ pushed |
+| `third_party_documented` → `THIRD_PARTY_DOCUMENTED` | TM01, TM02, TM08 | a gift letter from the payer ("I, X" / "from X") to the customer for the amount, dated 0–30 days before; or an invoice-finance advance: an agreement with the payer + the payer's remittance advice to the customer for the amount (0–7 days before), and total × advance rate = the credit when both are given. TM22 + gift letter: Lorenzo's DOB check decides the list match | this commit |
 
 **TM02 coverage follows the policy wording:** where TM02 counts only money "from anyone other than the client"
 (payments and FX), explaining the third-party money is enough; elsewhere both what's left coming in and going out must
@@ -28,12 +29,12 @@ stay under the floor (so own money in, then out to an undocumented party, stays 
 
 Results on the team labels (rules only, after each step; **wrongful closes 0 throughout**):
 
-| | Start | + business_records | + own_account | + returning_customer | + documented_event | + refund | + invoice |
-|---|---|---|---|---|---|---|---|
-| Bank (closable closed /29) | 3 | 7 | 9 | 11 | 18 | 23 | **27** |
-| E-money (/25) | 2 | 4 | 6 | 9 | 18 | 21 | **23** |
-| Investment (/28) | 0 | 0 | 10 | 13 | 17 | 20 | **20** |
-| Payments and FX (/24) | 1 | 1 | 1 | 1 | 2 | 5 | **11** |
+| | Start | + business_records | + own_account | + returning_customer | + documented_event | + refund | + invoice | + third party |
+|---|---|---|---|---|---|---|---|---|
+| Bank (closable closed /29) | 3 | 7 | 9 | 11 | 18 | 23 | 27 | **27** |
+| E-money (/25) | 2 | 4 | 6 | 9 | 18 | 21 | 23 | **23** |
+| Investment (/28) | 0 | 0 | 10 | 13 | 17 | 20 | 20 | **26** |
+| Payments and FX (/24) | 1 | 1 | 1 | 1 | 2 | 5 | 11 | **14** |
 
 Traps checked by hand for `invoice_matches` (all stay ESCALATE): invoices for "consultancy" dated after the payments
 to a higher-risk country; invoices whose amounts differ from the payments; one invoice equal to the sum of several
@@ -41,7 +42,7 @@ sub-threshold payments with a staff note; a matching invoice to a company the li
 
 Every shape a check touches closes 100% of its cases; every remaining closable miss belongs to a check not yet built.
 
-### Tests — `system/tests/test_explainers.py` (invented data only; 62 tests)
+### Tests — `system/tests/test_explainers.py` (invented data only; 71 tests)
 | Check | What the tests pin down |
 |---|---|
 | `business_records` (11) | all rows match → close; one row missing, one penny off, row dated after or > 2 days before, top-up above the day's takings, two equal deposits with one row → nothing; collection reports emptied the day before cite the cash procedure but not the KYC summary; only TM03; only cash deposits |
@@ -50,12 +51,12 @@ Every shape a check touches closes 100% of its cases; every remaining closable m
 | `documented_event` (14) | insurer letter (amount + payer + claim) → close, also TM01 at 8× (5× is own-account only); claim number missing, addressed to someone else, dated after or > 30 days before, other company, amount differs → nothing; invoice / gift letter / venue email / credit note ignored (their own checks); own-name credit ignored; six seller phrasings read as the customer; someone else selling → nothing; vehicle receipt needs the customer's ownership document (registration must match); house move: deposit return + holding deposit both documented → close, one missing → nothing |
 | `refund` (9) | venue refund of an earlier deposit → close (evidence: email, covering review, both legs); no document, document written before the original payment, no earlier payment of that amount, earlier payment to someone else, document naming neither booking nor party → nothing; cancelled subscription returned to the same account closes TM01 and TM02, without confirmation nothing; cash paid back in needs the review that covered the withdrawal (none, or written before the withdrawal → nothing); TM02 third-party-money wording closes, all-money wording with a big payment out doesn't |
 | `invoice_matches` (11) | hospital invoice → close; invoice dated after the payment, amount differs, other payee, reference number missing, other buyer, other pay-to account → nothing; factoring / employment / insurer documents ignored; financed car needs both the loan agreement and the dealer invoice; stage payments each on their schedule row (held payment cited first), one stage without a row → nothing; payment file covers the contractors and leaves few other parties, too few rows → nothing; own freight invoices may be issued after the receipt when the reference matches, not beyond the grace |
+| `third_party_documented` (9) | gift letter from the payer to the customer → close, also TM01 at 9×; letter from someone else, to someone else, amount differs, written after the money → nothing; invoice-finance advance with agreement + remittance advice → close; no agreement, advance ≠ rate × total, advice for another client → nothing |
 
 ### Next, in order of value
 1. ~~`refund`~~ ✅  2. ~~`invoice_matches`~~ ✅ (payments and FX purchase-order TM01 and pre-pause-supplier TM07 left out:
    both rest on the undocumented UK funding account — same team decision as own account)
-3. `third_party_documented` → `THIRD_PARTY_DOCUMENTED`: gift letter (giver = payer, recipient = customer), invoice-finance
-   advance (= advance rate × financed total).
+3. ~~`third_party_documented`~~ ✅
 4. `collection_documented`, `group_company`, TM10 redundancy (`DOCUMENTED_EVENT`), payments and FX own account (needs a
    team decision: undocumented UK funding account).
 5. Robustness test: reword dev documents (field names, titles, one-penny rounding) and see which checks still hold —

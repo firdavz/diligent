@@ -575,5 +575,56 @@ class InvoiceMatches(unittest.TestCase):
         self.assertEqual(self.codes([alert], [late], [rec]), [])  # beyond the grace
 
 
+class ThirdPartyDocumented(unittest.TestCase):
+    GIFT = txn("T1", "10-18", "in", 34600.38, "Jules Example", "54-08-00 80787746", "GIFT")
+    TM08 = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1"], "measured": {"limit_gbp": 1000}}
+
+    def letter(self, giver="Jules Example", to="Pat Example", amount="£34,600.38", dated="2026-10-17"):
+        return dated_doc("GFT-1", "gift_letter", f"To Whom It May Concern,\nI, {giver}, confirm that I am gifting the "
+                         f"sum of {amount} to my child, {to}.", dated, f"Gift letter from {giver}")
+
+    def codes(self, alerts, docs, txns):
+        from tm.explainers import third_party_documented
+        return [(s.kind, s.code) for s in third_party_documented(own_bundle(alerts, docs, txns))[0]]
+
+    def test_gift_letter_from_the_payer_to_the_customer_closes(self):
+        self.assertEqual(self.codes([self.TM08], [self.letter()], [self.GIFT]), [("explains", "THIRD_PARTY_DOCUMENTED")])
+
+    def test_closes_tm01_at_any_multiple(self):
+        alert = tm01([self.GIFT], 34600.38, 3800.0, 9.1)
+        self.assertEqual(self.codes([alert], [self.letter()], [self.GIFT]), [("explains", "THIRD_PARTY_DOCUMENTED")])
+
+    def test_letter_from_someone_other_than_the_payer_explains_nothing(self):
+        self.assertEqual(self.codes([self.TM08], [self.letter(giver="Someone Else")], [self.GIFT]), [])
+
+    def test_letter_to_someone_other_than_the_customer_explains_nothing(self):
+        self.assertEqual(self.codes([self.TM08], [self.letter(to="Robin Other")], [self.GIFT]), [])
+
+    def test_amount_differs_or_letter_after_the_money_explains_nothing(self):
+        self.assertEqual(self.codes([self.TM08], [self.letter(amount="£34,000.00")], [self.GIFT]), [])
+        self.assertEqual(self.codes([self.TM08], [self.letter(dated="2026-10-19")], [self.GIFT]), [])
+
+    ADV = txn("T1", "09-09", "in", 89895.79, "Testgate Invoice Finance Ltd", "24-78-79 76652096", "ADVANCE")
+    AGREEMENT = dated_doc("FAC-1", "factoring_agreement", "Testgate Invoice Finance Ltd provides an advance of 85% on "
+                          "approved invoices.", "2026-02-22", "Invoice finance agreement with Testgate Invoice Finance Ltd")
+
+    def advice(self, total="£105,759.75", advance="£89,895.79", client="Pat Example"):
+        return dated_doc("RMT-1", "remittance_advice", f"**Client:** {client}\n**Invoices financed:** 7, total {total}\n"
+                         f"**Advance at 85%:** {advance}", "2026-09-09", "Remittance advice from Testgate Invoice Finance Ltd")
+
+    def test_invoice_finance_advance_with_agreement_and_advice_closes(self):
+        self.assertEqual(self.codes([self.TM08], [self.AGREEMENT, self.advice()], [self.ADV]),
+                         [("explains", "THIRD_PARTY_DOCUMENTED")])
+
+    def test_advance_without_the_agreement_explains_nothing(self):
+        self.assertEqual(self.codes([self.TM08], [self.advice()], [self.ADV]), [])
+
+    def test_advance_that_is_not_the_rate_times_the_total_explains_nothing(self):
+        self.assertEqual(self.codes([self.TM08], [self.AGREEMENT, self.advice(total="£120,000.00")], [self.ADV]), [])
+
+    def test_advice_for_another_client_explains_nothing(self):
+        self.assertEqual(self.codes([self.TM08], [self.AGREEMENT, self.advice(client="Other Client Ltd")], [self.ADV]), [])
+
+
 if __name__ == "__main__":
     unittest.main()
