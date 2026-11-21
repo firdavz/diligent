@@ -2,7 +2,13 @@
 
 Shared review queue for doubtful labels: https://claude.ai/artifact/DoZMRhPuWj44RJcBe4QduS (private until Andrei shares it).
 
-- **Queue** (`queue` collection, written by Claude): cases whose label is not high confidence, where a non-fallback rule
+- **To look at** (`queue`): open questions for the organisers and rule gaps (code to write), each with what happened,
+  what to decide, what we know (our label, the blind model, the system) and the SOP clause. **Settled** (`settled`): every
+  label the SOP settles, with the clause quoted.
+- **Label new cases** (`newcases`): 40 unlabelled development cases (10 per institution, one per large case shape). Each case
+  file opens as dropdowns (customer, alerts, transactions with the alerted ones starred, earlier reviews, list entries, one
+  dropdown per document); label with the verdict and reason-code dropdowns. Every tab has the same form.
+- **How cases get there** (`queue` collection, written by Claude): cases whose label is not high confidence, where a non-fallback rule
   disagrees with the label, or where the system closes a case the label says not to. Built by
   `python3 eval/review_queue.py <dir>` from `eval/labels/` and the latest `system/traces/`.
 - **Decisions** (`decisions` collection): anyone with contributor access confirms the label or picks a new verdict and

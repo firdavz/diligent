@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 
-from _common import INSTITUTIONS, ROOT
+from _common import INSTITUTIONS, PREFIX, ROOT
 
 
 def queue(out_dir: str) -> None:
@@ -72,9 +72,17 @@ def apply(decisions_path: str) -> None:
             lab["reviewed"] = True
             if d.get("note"):
                 lab["note"] = f"{lab.get('note', '')} [review: {d['note']}]".strip()
+        known = {lab["case_id"] for lab in labels}
+        added = 0
+        for cid, d in sorted(decisions.items()):  # cases labelled for the first time on the desk ("Label new cases")
+            if cid in known or d.get("institution", PREFIX.get(cid[:2])) != inst:
+                continue
+            labels.append({"case_id": cid, "verdict": d["verdict"], "reason_code": d["reason_code"], "key_evidence": [],
+                           "confidence": "high", "note": d.get("note", ""), "source": "review desk", "reviewed": True})
+            added += 1
         with open(path, "w") as f:
             f.writelines(json.dumps(lab, ensure_ascii=False) + "\n" for lab in labels)
-        print(f"{inst}: {changed} labels changed", file=sys.stderr)
+        print(f"{inst}: {changed} labels changed, {added} new labels added", file=sys.stderr)
 
 
 if __name__ == "__main__":

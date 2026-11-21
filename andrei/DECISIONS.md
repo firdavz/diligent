@@ -167,10 +167,42 @@ Teammates: keep your own notes in a folder named after you, like this one.
   leaves unknown. pplx-decider `:free` as a fallback only: free-tier rate limits are a risk when the judges run 800 cases ×5.
 - Cache every answer as before; round probabilities (e.g. to 2 dp) before thresholding so float drift can't flip anything.
 
+## D19 — The SOP is the source of truth
+- Each institution's `POLICY.md` decides. Labels, the blind model's opinions, our own judgement and the code all yield
+  to it. When a case looks doubtful, find the clause first; ask the organisers only where two clauses genuinely pull apart.
+- Applied (21 Nov): 44 of the 50 doubtful labels are settled by a clause, now `confidence: high` with the clause quoted in
+  `sop_basis`:
+  - the own-account clause (no document showing the customer holds the account → RFI);
+  - the internal-list clause (nothing settles it and nothing else concerning → RFI);
+  - "no suspicion yet" → RFI, not ESCALATE;
+  - "signs of crime" → ESCALATE;
+  - the reason-code table.
+- The last 6 are settled by reasoning through the clauses too (`sop_basis` on each):
+  - group trip with no booking → RFI (CLOSE needs the activity to fit what the institution knows, and a *documented*
+    collection);
+  - freelancer studio with no payment file → RFI_BUSINESS_RECORDS (payees in undeclared countries, so it doesn't fit the
+    profile);
+  - re-deposited cash → CLOSE REFUND_OF_EARLIER_PAYMENT (the bank's own history shows the identical withdrawal, the chat
+    explains its return; ~80% confident, so worth a confirmation from Ahmad but not a blocker).
+- No new SOPs at test time: the unseen cases come "under the same policies" with the same files, and the system reads
+  each folder's POLICY.md at run time anyway.
+- Rules and code follow the same order: SOP clause → code. The audit trail quotes the clause (D15).
+
+## D20 — OpenRouter credit is the constraint, not the key limit
+- The team key has a $50 cap, but the account behind it holds **$5**; $4.06 is spent (21 Nov 13:40), almost all on the
+  blind second-opinion labelling. Running 7 labelling jobs at once also hit 429 rate limits. 266 of 411 blind labels came
+  back unusable (402 Payment Required, 429 Too Many Requests).
+- Usable blind labels: ~145. They confirmed 67 of 69 team labels and found 3 shape conflicts (all settled by the SOP or
+  logged as rule gaps on the review desk) and one open question: does the own-account clause apply to a payments and FX
+  client's own funding account (PX-CS123336)?
+- **Keep the remaining credit for the reader** (Jev costs ~$0.00002 a call). More blind labelling needs a top-up first, and
+  then one job at a time with ≤ 4 workers.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
 - [ ] Is a pre-filled model cache acceptable? (D6)
 - [x] OpenRouter's `/api/alpha/decisions` endpoint is allowed — organisers confirmed (D18).
 - [ ] Owners for A/B/C/D (see `TEAM.md`).
+- [ ] Ask Ahmad: does the own-account clause cover a payments and FX client's own funding account? (PX-CS123336; decides ~210 cases)
 - [ ] Measure real tier-1/tier-2 cost and latency on 20 cases; set the tier-2 cap (D13).
