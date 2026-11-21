@@ -1,0 +1,15 @@
+# Dataset and anything derived from it — participants only, never in a public repo
+data/
+institutions/
+hackathon/
+*.zip
+eval/labels/
+eval/drafts/
+# Secrets
+.env
+*.key
+# Model cache is local until we decide (docs/DECISIONS.md D6)
+system/cache/
+__pycache__/
+*.pyc
+.DS_Store
