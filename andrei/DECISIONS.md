@@ -347,6 +347,23 @@ Teammates: keep your own notes in a folder named after you, like this one.
 - The only human labels will come from the review desk's "Label new cases" tab (40 cases); until then, every score we
   quote is against AI-made references.
 
+## D30 — BinEval on the 146 team-labelled cases it had never seen: 90% verdict, 0 wrongful closes
+- `eval/bineval.py` (iteration 2, unchanged) on the 146 team-labelled cases outside its tuning and validation sets:
+
+  | | Verdict | Code | Wrongful closes |
+  |---|---|---|---|
+  | **BinEval (SOP questions + table)** | **131/146 (90%)** | 112/146 | **0** |
+  | Holistic labeller (verdict + code questions) | 141/146 (97%) | 112/146 | — |
+
+  BinEval per verdict: CLOSE precision 100% / recall 82%; RFI 75% / 98%; ESCALATE **97% / 95%**. By institution:
+  bank 34/38, e-money 32/33, investment 37/40, payments and FX 28/35.
+- Read with care: the references are AI-made (D29), and the holistic labeller is the same model family that agreed 95%
+  with them, so its 97% is partly agreement with itself. BinEval reaches its verdicts through a fixed table, so every
+  answer is traceable and it never closed wrongly; it is more cautious (CLOSE recall 82%).
+- **Use:** BinEval's red-flag questions are precise (ESCALATE precision 97%), so they are a good source of *soft red
+  flags* in the reader; its explanation questions can support code-verified closes. It should not replace the
+  rules. Its misses concentrate in payments and FX again.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.

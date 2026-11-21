@@ -1,0 +1,736 @@
+{
+ "version": "sop-f07d7c7e",
+ "totals": {
+  "bin": 131,
+  "bin_code": 112,
+  "holistic": 141,
+  "holistic_code": 112,
+  "n": 146,
+  "bin_wrongful": 0
+ },
+ "misses": [
+  {
+   "case_id": "BK-CS100162",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "REFUND_OF_EARLIER_PAYMENT"
+   ],
+   "e_kind": [
+    "none",
+    0.61
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM05"
+   ]
+  },
+  {
+   "case_id": "BK-CS120724",
+   "bin": [
+    "RFI",
+    "RFI_UPDATED_PROFILE",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "REFUND_OF_EARLIER_PAYMENT"
+   ],
+   "e_kind": [
+    "none",
+    0.61
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM05"
+   ]
+  },
+  {
+   "case_id": "BK-CS370583",
+   "bin": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "REFUND_OF_EARLIER_PAYMENT"
+   ],
+   "e_kind": [
+    "refund",
+    0.99
+   ],
+   "yes": [
+    "e_amount",
+    "e_dated",
+    "e_all",
+    "alert_TM06"
+   ]
+  },
+  {
+   "case_id": "BK-CS119050",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_UNEXPLAINED_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    0.98
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "BK-CS159092",
+   "bin": [
+    "CLOSE",
+    "OWN_ACCOUNT",
+    "e_kind + own_holds"
+   ],
+   "label": [
+    "CLOSE",
+    "RETURNING_CUSTOMER"
+   ],
+   "e_kind": [
+    "own_account",
+    0.92
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_all",
+    "own_holds",
+    "alert_TM07"
+   ]
+  },
+  {
+   "case_id": "EM-CS137799",
+   "bin": [
+    "CLOSE",
+    "INVOICE_MATCHES",
+    "e_kind"
+   ],
+   "label": [
+    "CLOSE",
+    "DOCUMENTED_EVENT"
+   ],
+   "e_kind": [
+    "invoice",
+    0.59
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM02"
+   ]
+  },
+  {
+   "case_id": "EM-CS148508",
+   "bin": [
+    "CLOSE",
+    "INVOICE_MATCHES",
+    "e_kind"
+   ],
+   "label": [
+    "CLOSE",
+    "DOCUMENTED_EVENT"
+   ],
+   "e_kind": [
+    "invoice",
+    0.55
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM02"
+   ]
+  },
+  {
+   "case_id": "EM-CS165261",
+   "bin": [
+    "RFI",
+    "RFI_COUNTERPARTY_DETAILS",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "EM-CS248575",
+   "bin": [
+    "ESCALATE",
+    "ESC_PASS_THROUGH",
+    "r_passthrough"
+   ],
+   "label": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party",
+    "r_passthrough"
+   ]
+  },
+  {
+   "case_id": "EM-CS109808",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_UNEXPLAINED_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "r_passthrough",
+    "r_mule",
+    "r_contradict"
+   ]
+  },
+  {
+   "case_id": "EM-CS162071",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party",
+    "r_passthrough",
+    "r_mule",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "EM-CS173784",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party",
+    "r_passthrough",
+    "r_mule",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "EM-CS141956",
+   "bin": [
+    "CLOSE",
+    "OWN_ACCOUNT",
+    "e_kind + own_holds"
+   ],
+   "label": [
+    "CLOSE",
+    "RETURNING_CUSTOMER"
+   ],
+   "e_kind": [
+    "own_account",
+    0.83
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_all",
+    "own_holds",
+    "alert_TM07"
+   ]
+  },
+  {
+   "case_id": "EM-CS419282",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party",
+    "r_passthrough",
+    "r_mule",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "IV-CS129267",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_UNEXPLAINED_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "r_passthrough",
+    "r_mule",
+    "r_contradict"
+   ]
+  },
+  {
+   "case_id": "IV-CS145694",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_UNEXPLAINED_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "r_passthrough",
+    "r_mule",
+    "r_contradict"
+   ]
+  },
+  {
+   "case_id": "IV-CS124116",
+   "bin": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR",
+    "r_corridor"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_THIRD_PARTY_FUNDING"
+   ],
+   "e_kind": [
+    "none",
+    0.99
+   ],
+   "yes": [
+    "e_party",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "IV-CS180132",
+   "bin": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR",
+    "r_corridor"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_THIRD_PARTY_FUNDING"
+   ],
+   "e_kind": [
+    "none",
+    0.99
+   ],
+   "yes": [
+    "e_party",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "IV-CS134100",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "DOCUMENTED_EVENT"
+   ],
+   "e_kind": [
+    "one_off_event",
+    0.94
+   ],
+   "yes": [
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM10"
+   ]
+  },
+  {
+   "case_id": "IV-CS112234",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "REFUND_OF_EARLIER_PAYMENT"
+   ],
+   "e_kind": [
+    "refund",
+    0.9
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_all",
+    "own_holds",
+    "alert_TM01",
+    "alert_TM02"
+   ]
+  },
+  {
+   "case_id": "IV-CS104545",
+   "bin": [
+    "RFI",
+    "RFI_COUNTERPARTY_DETAILS",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "IV-CS108040",
+   "bin": [
+    "CLOSE",
+    "OWN_ACCOUNT",
+    "e_kind + own_holds"
+   ],
+   "label": [
+    "CLOSE",
+    "RETURNING_CUSTOMER"
+   ],
+   "e_kind": [
+    "own_account",
+    0.74
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_all",
+    "own_holds",
+    "alert_TM07"
+   ]
+  },
+  {
+   "case_id": "IV-CS614573",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "REFUND_OF_EARLIER_PAYMENT"
+   ],
+   "e_kind": [
+    "refund",
+    0.94
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_all",
+    "own_holds",
+    "alert_TM02"
+   ]
+  },
+  {
+   "case_id": "PX-CS127262",
+   "bin": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS",
+    "rfi_ask"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR"
+   ],
+   "e_kind": [
+    "invoice",
+    0.96
+   ],
+   "yes": [
+    "e_amount"
+   ]
+  },
+  {
+   "case_id": "PX-CS194531",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "nothing explains it"
+   ],
+   "label": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS"
+   ],
+   "e_kind": [
+    "none",
+    0.99
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "PX-CS101658",
+   "bin": [
+    "RFI",
+    "RFI_UPDATED_PROFILE",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "INVOICE_MATCHES"
+   ],
+   "e_kind": [
+    "invoice",
+    0.84
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated"
+   ]
+  },
+  {
+   "case_id": "PX-CS107109",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "nothing explains it"
+   ],
+   "label": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS"
+   ],
+   "e_kind": [
+    "none",
+    0.99
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "PX-CS118657",
+   "bin": [
+    "RFI",
+    "RFI_UPDATED_PROFILE",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS"
+   ],
+   "e_kind": [
+    "none",
+    0.97
+   ],
+   "yes": [
+    "e_party",
+    "e_dated"
+   ]
+  },
+  {
+   "case_id": "PX-CS148667",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "nothing explains it"
+   ],
+   "label": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS"
+   ],
+   "e_kind": [
+    "none",
+    0.98
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "PX-CS196750",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "own_holds"
+   ],
+   "label": [
+    "CLOSE",
+    "RETURNING_CUSTOMER"
+   ],
+   "e_kind": [
+    "returning_customer",
+    0.52
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM07"
+   ]
+  },
+  {
+   "case_id": "PX-CS198509",
+   "bin": [
+    "RFI",
+    "RFI_BUSINESS_RECORDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "INVOICE_MATCHES"
+   ],
+   "e_kind": [
+    "invoice",
+    0.83
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated"
+   ]
+  },
+  {
+   "case_id": "PX-CS158289",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "GROUP_COMPANY"
+   ],
+   "e_kind": [
+    "group_company",
+    0.99
+   ],
+   "yes": [
+    "e_party",
+    "e_dated",
+    "e_all"
+   ]
+  },
+  {
+   "case_id": "PX-CS299685",
+   "bin": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "GROUP_COMPANY"
+   ],
+   "e_kind": [
+    "group_company",
+    0.98
+   ],
+   "yes": [
+    "e_party",
+    "e_dated",
+    "e_all"
+   ]
+  },
+  {
+   "case_id": "PX-CS264273",
+   "bin": [
+    "RFI",
+    "RFI_UPDATED_PROFILE",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "THIRD_PARTY_DOCUMENTED"
+   ],
+   "e_kind": [
+    "third_party_relationship",
+    0.9
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated",
+    "alert_TM08"
+   ]
+  }
+ ]
+}
