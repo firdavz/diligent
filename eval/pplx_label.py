@@ -1,4 +1,4 @@
-"""Label cases with a decision model (free pplx-decider): verdict, then reason code, as SOP-worded choice questions.
+"""Label cases with a decision model (also: <institution> <name> ID,ID,... for explicit cases) (free pplx-decider): verdict, then reason code, as SOP-worded choice questions.
 
 python3 eval/pplx_label.py <institution> labelled            # calibrate: label our labelled cases, report agreement
 python3 eval/pplx_label.py <institution> new <n_per_shape>   # label n unlabelled cases per case shape
@@ -101,6 +101,8 @@ def main():
     labels = {json.loads(line)["case_id"]: json.loads(line) for line in open(os.path.join(ROOT, "eval", "labels", f"{inst}.jsonl"))}
     if mode == "labelled":
         ids = sorted(labels)
+    elif len(sys.argv) > 3 and "," in sys.argv[3] or (len(sys.argv) > 3 and sys.argv[3].count("-") == 1 and not sys.argv[3].isdigit()):
+        ids = sys.argv[3].split(",")  # explicit case IDs: python3 eval/pplx_label.py <inst> <name> ID,ID,...
     else:
         n = int(sys.argv[3]) if len(sys.argv) > 3 else 2
         groups = defaultdict(list)
