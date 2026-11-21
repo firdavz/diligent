@@ -23,7 +23,6 @@ import urllib.request
 
 from _common import INSTITUTIONS, ROOT, bundles
 
-KEY = os.environ["OPENROUTER_API_KEY"]
 URL = "https://openrouter.ai/api/alpha/decisions"
 MODELS = ["perplexity/pplx-decider-v1.3:free", "typesafe/jev-1.13"]
 YES = 0.7
@@ -130,9 +129,12 @@ def ask(cid, inst, state, questions):
     path = os.path.join(cache, cid + ".json")
     if os.path.exists(path):
         return json.load(open(path))
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if not key:
+        raise SystemExit("Set OPENROUTER_API_KEY to fetch uncached BinEval answers.")
     for model in MODELS:
         req = urllib.request.Request(URL, json.dumps({"model": model, "questions": questions, "state": state}).encode(),
-                                     {"Authorization": "Bearer " + KEY, "Content-Type": "application/json"})
+                                     {"Authorization": "Bearer " + key, "Content-Type": "application/json"})
         for wait in (5, 20, 0):
             try:
                 with urllib.request.urlopen(req, timeout=180) as r:
@@ -149,9 +151,9 @@ def ask(cid, inst, state, questions):
     return None
 
 
-def yes(ans, q):
+def yes(ans, q, threshold=YES):
     a = ans.get(q) or {}
-    return float(a.get("noul", 0)) >= YES
+    return float(a.get("noul", 0)) >= threshold
 
 
 def choice(ans, q):
@@ -166,7 +168,7 @@ def tm01_multiple(b):
     return max([x for x in m if x is not None], default=None)
 
 
-def decide(ans, b):
+def decide(ans, b, *, red_thresholds=None):
     """The fixed table. Returns (verdict, code, which question decided it)."""
     per_alert = [q for q in ans if q.startswith("alert_")]
     if per_alert:  # "every alert explained" = every per-alert SOP question answered yes (or the holistic e_all)
@@ -174,7 +176,7 @@ def decide(ans, b):
         if all(yes(ans, q) for q in per_alert):
             ans["e_all"] = {"noul": 1.0}
     for q, code in RED:
-        if yes(ans, q):
+        if yes(ans, q, (red_thresholds or {}).get(q, YES)):
             return "ESCALATE", code, q
     has_list = any(a["rule_id"] == "TM22" for a in b.alerts)
     if yes(ans, "l_diff") and all(a["rule_id"] in ("TM22", "TM08", "TM01") for a in b.alerts):
