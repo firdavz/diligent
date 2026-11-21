@@ -64,17 +64,29 @@
   .btn:disabled { opacity: .5; cursor: default; }
   .status { font-size: 12.5px; color: var(--muted); } .status.err { color: var(--bad); }
   .empty { padding: 24px 16px; color: var(--muted); }
+  .cv { display: grid; gap: 6px; }
+  .cv details { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  .cv details > summary { padding: 7px 10px; font-weight: 500; color: var(--fg); list-style-position: inside; }
+  .cv details[open] > summary { border-bottom: 1px solid var(--line); }
+  .cv .body { padding: 8px 10px; display: grid; gap: 6px; min-width: 0; }
+  .cv .sum-sub { color: var(--muted); font-weight: 400; font-size: 12.5px; }
+  .cv pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .cv .docs { display: grid; gap: 6px; }
+  .cv .docs details { background: var(--well); }
+  .cv .hit { background: color-mix(in srgb, var(--warn) 18%, transparent); border-radius: 3px; }
+  .cv .count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 400; }
   @media (prefers-reduced-motion: no-preference) { .list li button { transition: background .12s ease-out; } }
 </style>
 
 <div class="wrap">
   <header>
     <h1>Label Review Desk</h1>
-    <p class="lede">Which cases still need a look, what happened in each, and what we know. The SOP decides: anything a POLICY.md clause settles moves to the Settled tab with the clause quoted. Open questions are for the organisers; rule gaps are code to write.</p>
+    <p class="lede">Which cases still need a look, what happened in each, and what we know. Open any case's file below the summary, and label it with the two dropdowns. The SOP decides: anything a POLICY.md clause settles moves to the Settled tab with the clause quoted. Open questions are for the organisers; rule gaps are code to write.</p>
   </header>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tab-look" aria-selected="true">To look at<span class="n" id="n-look">0</span></button>
     <button class="tab" role="tab" id="tab-settled" aria-selected="false">Settled by the SOP<span class="n" id="n-settled">0</span></button>
+    <button class="tab" role="tab" id="tab-new" aria-selected="false">Label new cases<span class="n" id="n-new">0</span></button>
   </div>
   <div class="desk">
     <section class="panel" aria-label="Cases"><ul class="list" id="list"><li class="empty">Loading…</li></ul></section>
@@ -94,22 +106,24 @@
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const pill = (status) => el("span", "pill " + (status === "open question" ? "open" : status === "rule gap" ? "gap" : "settled"), status);
 
-  let tab = "look", queue = [], settled = [], decisions = {}, current = null, db = null, user = null, myId = null, names = {};
-  const rows = () => (tab === "look" ? queue : settled);
+  let tab = "look", queue = [], settled = [], fresh = [], decisions = {}, current = null, db = null, user = null, myId = null, names = {};
+  const rows = () => (tab === "look" ? queue : tab === "settled" ? settled : fresh);
 
   function renderList() {
     const ul = $("#list"); ul.replaceChildren();
     $("#n-look").textContent = queue.length; $("#n-settled").textContent = settled.length;
-    $("#tab-look").setAttribute("aria-selected", String(tab === "look"));
-    $("#tab-settled").setAttribute("aria-selected", String(tab === "settled"));
+    $("#n-new").textContent = `${fresh.filter((f) => decisions[f.case_id]).length}/${fresh.length}`;
+    for (const k of ["look", "settled", "new"]) $("#tab-" + k).setAttribute("aria-selected", String(tab === k));
     const list = rows();
     if (!list.length) { ul.append(el("li", "empty", db ? "Nothing here." : "Sign in to claude.ai to load the desk.")); return; }
     for (const it of list) {
       const li = el("li"), b = el("button"); b.type = "button";
       b.setAttribute("aria-current", String(current === it.case_id));
-      const r1 = el("span", "row1"); r1.append(document.createTextNode(it.case_id), tab === "look" ? pill(decisions[it.case_id] ? "settled" : it.status) : pill("settled"));
-      const t = el("span", "ttl", tab === "look" ? it.title : `${it.verdict} · ${it.reason_code.replace(/_/g, " ").toLowerCase()}`);
-      const s = el("span", "sub", tab === "look" ? `${INST[it.institution]} · owner: ${it.owner}` : INST[it.institution]);
+      const r1 = el("span", "row1");
+      r1.append(document.createTextNode(it.case_id), tab === "look" ? pill(decisions[it.case_id] ? "settled" : it.status)
+        : tab === "settled" ? pill("settled") : el("span", "pill " + (decisions[it.case_id] ? "settled" : "gap"), decisions[it.case_id] ? "labelled" : "to label"));
+      const t = el("span", "ttl", tab === "look" ? it.title : tab === "settled" ? `${it.verdict} · ${it.reason_code.replace(/_/g, " ").toLowerCase()}` : it.shape);
+      const s = el("span", "sub", tab === "look" ? `${INST[it.institution]} · owner: ${it.owner}` : tab === "settled" ? INST[it.institution] : `${INST[it.institution]} · ${it.shape_size} cases like this`);
       b.append(r1, t, s);
       b.addEventListener("click", () => { current = it.case_id; renderList(); renderDetail(); });
       li.append(b); ul.append(li);
@@ -122,70 +136,119 @@
     if (note) b.append(el("div", "note", note)); return b;
   }
 
+  function caseViewer(text) {
+    const wrap = el("div", "cv");
+    if (!text) { wrap.append(el("p", "note", "No case file stored for this case.")); return wrap; }
+    const lines = text.split("\n"); const secs = []; let cur = { title: "Case", lines: [] };
+    for (const ln of lines) { if (ln.startsWith("--- ")) { secs.push(cur); cur = { title: ln.slice(4), lines: [] }; } else cur.lines.push(ln); }
+    secs.push(cur);
+    for (const s of secs) {
+      const body = s.lines.filter((x) => x.trim()).join("\n");
+      if (s.title === "Case" || !body.trim() && !s.title.startsWith("DOCUMENTS")) {
+        if (s.title !== "Case") { const d = el("details"); d.append(el("summary", null, `${s.title.split(" (")[0]} `), el("div", "body", "none")); d.lastChild.textContent = "None on file."; wrap.append(d); }
+        continue;
+      }
+      const name = s.title.split(" (")[0];
+      const d = el("details"); if (/^ALERTS|^CUSTOMER/.test(name)) d.open = true;
+      const sum = el("summary", null, name.charAt(0) + name.slice(1).toLowerCase() + " ");
+      const b = el("div", "body");
+      if (name.startsWith("DOCUMENTS")) {
+        const docs = el("div", "docs"); let dd = null, buf = [];
+        const flush = () => { if (dd) { dd.append(Object.assign(el("div", "body"), {}), ); dd.lastChild.append(el("pre", null, buf.join("\n").replace(/^    /gm, ""))); docs.append(dd); } };
+        for (const ln of s.lines) {
+          const m = ln.match(/^\[([^\]]+)\]\s*(.*)$/);
+          if (m) { flush(); dd = el("details"); const sm = el("summary", null, m[1] + " "); sm.append(el("span", "sum-sub", m[2])); dd.append(sm); buf = []; }
+          else if (dd && ln.trim()) buf.push(ln);
+        }
+        flush();
+        sum.append(el("span", "count", `(${docs.children.length})`)); b.append(docs);
+      } else if (name.startsWith("TRANSACTIONS")) {
+        const pre = el("pre");
+        const txl = s.lines.filter((x) => x.trim());
+        for (const ln of txl) { const span = el("span", ln.trimStart().startsWith("*") ? "hit" : null, ln.replace(/^ \*/, " ★") + "\n"); pre.append(span); }
+        sum.append(el("span", "count", `(${txl.length}; ★ = the alert fired on it)`)); b.append(pre);
+      } else {
+        b.append(el("pre", null, body.replace(/^  /gm, "")));
+      }
+      d.append(sum, b); wrap.append(d);
+    }
+    return wrap;
+  }
+
+  function labelForm(it, preset) {
+    const dec = decisions[it.case_id];
+    const form = el("form", "decide");
+    if (dec) form.append(el("p", "note", `Recorded by ${names[dec.by] || "someone"}: ${dec.verdict} · ${dec.reason_code}${dec.note ? " — " + dec.note : ""}`));
+    const row = el("div", "decide-row");
+    const vl = el("label", null, "Verdict"); const v = el("select"); v.id = "d-verdict";
+    const start = dec ? dec : preset || {};
+    if (!start.verdict) v.append(new Option("Choose…", "", true, true));
+    for (const x of ["CLOSE", "RFI", "ESCALATE"]) v.append(new Option(x, x, false, x === start.verdict));
+    vl.append(v);
+    const cl = el("label", null, "Reason code"); const c = el("select"); c.id = "d-code";
+    const fill = (keep) => c.replaceChildren(...(CODES[v.value] || []).map((k) => new Option(k.replace(/_/g, " ").toLowerCase(), k, false, k === keep)));
+    fill(start.reason_code); v.addEventListener("change", () => fill(null));
+    cl.append(c); row.append(vl, cl);
+    const nl = el("label", null, "What decided it (which document, which SOP clause)"); const n = el("textarea"); n.id = "d-note"; n.value = (dec && dec.note) || ""; nl.append(n);
+    const act = el("div", "decide-row"); const save = el("button", "btn primary", dec ? "Update my label" : "Save my label"); save.type = "submit";
+    const st = el("span", "status"); st.setAttribute("aria-live", "polite"); act.append(save, st);
+    form.append(row, nl, act);
+    if (!db) { save.disabled = true; st.textContent = "Sign in to claude.ai to label."; }
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault(); if (!db) return;
+      if (!v.value || !c.value) { st.className = "status err"; st.textContent = "Pick a verdict and a reason code."; return; }
+      save.disabled = true; st.className = "status"; st.textContent = "Saving…";
+      try {
+        await db.collection("decisions").doc(it.case_id).set({ case_id: it.case_id, institution: it.institution,
+          agree: !!(preset && v.value === preset.verdict && c.value === preset.reason_code), source: tab,
+          verdict: v.value, reason_code: c.value, note: n.value.trim(), by: myId || "", at: new Date().toISOString() });
+        st.textContent = "Saved. It becomes a label at the next check-in.";
+        const next = rows().find((x) => x.case_id !== it.case_id && !decisions[x.case_id]);
+        if (next && tab === "new") { current = next.case_id; }
+      } catch { st.className = "status err"; st.textContent = "Not saved: you may only have view access. Ask Andrei for contributor access."; }
+      finally { save.disabled = false; }
+    });
+    return form;
+  }
+
   function renderDetail() {
     const d = $("#detail"); d.replaceChildren();
     const it = rows().find((x) => x.case_id === current);
     if (!it) { d.append(el("div", "empty", "Pick a case.")); return; }
     const head = el("div", "sec"); const hl = el("div", "head");
-    hl.append(el("h2", null, it.case_id), el("span", "sub", INST[it.institution]), tab === "look" ? pill(it.status) : pill("settled"));
+    hl.append(el("h2", null, it.case_id), el("span", "sub", INST[it.institution]),
+      tab === "look" ? pill(it.status) : tab === "settled" ? pill("settled") : el("span", "pill gap", "to label"));
     head.append(hl);
     if (tab === "look") head.append(el("p", "ttl", it.title));
+    if (tab === "new") head.append(el("p", "ttl", `Case shape: ${it.shape} (${it.shape_size} cases like this in the development set)`));
     d.append(head);
 
-    if (tab === "settled") {
-      d.append(sec("Decision", el("p", null, `${it.verdict} · ${it.reason_code}`)));
-      d.append(sec("What happened", el("p", null, it.note || "—")));
+    if (tab === "look") {
+      d.append(sec("What happened", el("p", null, it.summary)));
+      d.append(sec("What to decide", el("p", null, it.decide)));
+      const three = el("div", "three");
+      if (it.label) three.append(box("Our label", it.label.verdict, it.label.reason_code, it.label.note));
+      if (it.model) three.append(box("Blind model", it.model.verdict, it.model.reason_code, (it.model.says || "").slice(0, 320) + ((it.model.says || "").length > 320 ? "…" : "")));
+      three.append(box("Our system now", it.system.verdict, it.system.reason_code, it.system.reason));
+      d.append(sec("What we know", el("p", null, it.know), three));
+      d.append(sec("SOP clause", el("p", "sop", it.sop)));
+    } else if (tab === "settled") {
+      d.append(sec("Our label", el("p", null, `${it.verdict} · ${it.reason_code}`), el("p", "note", it.note || "")));
       d.append(sec("Why the SOP settles it", el("p", "sop", it.sop_basis)));
       if (it.model) d.append(sec("Blind model's view", el("p", it.model.verdict === it.verdict ? null : "note",
         it.model.verdict === it.verdict ? `Agrees: ${it.model.verdict} · ${it.model.reason_code}` : `Disagrees: ${it.model.verdict} · ${it.model.reason_code}. The SOP reasoning above stands.`)));
-      return;
-    }
-
-    d.append(sec("What happened", el("p", null, it.summary)));
-    d.append(sec("What to decide", el("p", null, it.decide)));
-    const three = el("div", "three");
-    if (it.label) three.append(box("Our label", it.label.verdict, it.label.reason_code, it.label.note));
-    if (it.model) three.append(box("Blind model", it.model.verdict, it.model.reason_code, (it.model.says || "").slice(0, 320) + ((it.model.says || "").length > 320 ? "…" : "")));
-    three.append(box("Our system now", it.system.verdict, it.system.reason_code, it.system.reason));
-    d.append(sec("What we know", el("p", null, it.know), three));
-    d.append(sec("SOP clause", el("p", "sop", it.sop)));
-    const det = el("details"); det.append(el("summary", null, "Full case file (alerts, transactions, documents)"), el("pre", "case", it.case_text));
-    d.append(sec(null, det));
-
-    if (it.status === "open question") {
-      const dec = decisions[it.case_id];
-      const form = el("form", "decide");
-      if (dec) form.append(el("p", "note", `Recorded by ${names[dec.by] || "someone"}: ${dec.verdict} · ${dec.reason_code}${dec.note ? " — " + dec.note : ""}`));
-      const row = el("div", "decide-row");
-      const vl = el("label", null, "Verdict"); const v = el("select"); v.id = "d-verdict";
-      for (const x of ["CLOSE", "RFI", "ESCALATE"]) v.append(new Option(x, x, false, x === (dec ? dec.verdict : it.label && it.label.verdict)));
-      vl.append(v);
-      const cl = el("label", null, "Reason code"); const c = el("select"); c.id = "d-code";
-      const fill = (keep) => c.replaceChildren(...CODES[v.value].map((k) => new Option(k, k, false, k === keep)));
-      fill(dec ? dec.reason_code : it.label && it.label.reason_code); v.addEventListener("change", () => fill(null));
-      cl.append(c); row.append(vl, cl);
-      const nl = el("label", null, "What decided it (e.g. the organisers' answer)"); const n = el("textarea"); n.id = "d-note"; n.value = (dec && dec.note) || ""; nl.append(n);
-      const act = el("div", "decide-row"); const save = el("button", "btn primary", "Record the answer"); save.type = "submit";
-      const st = el("span", "status"); st.setAttribute("aria-live", "polite"); act.append(save, st);
-      form.append(row, nl, act);
-      if (!db) { save.disabled = true; st.textContent = "Sign in to claude.ai to record answers."; }
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault(); if (!db) return; save.disabled = true; st.className = "status"; st.textContent = "Saving…";
-        try {
-          await db.collection("decisions").doc(it.case_id).set({ case_id: it.case_id, agree: !!(it.label && v.value === it.label.verdict && c.value === it.label.reason_code),
-            verdict: v.value, reason_code: c.value, note: n.value.trim(), by: myId || "", at: new Date().toISOString() });
-          st.textContent = "Saved. Claude folds it into the labels at the next check-in.";
-        } catch { st.className = "status err"; st.textContent = "Not saved: you may only have view access. Ask Andrei for contributor access."; }
-        finally { save.disabled = false; }
-      });
-      d.append(sec("Record the answer", form));
     } else {
-      d.append(sec("What happens next", el("p", null, `This is code to write, not a label to change. Owner: ${it.owner}. It leaves this list when the system gets the case right.`)));
+      d.append(sec("How to label", el("p", null, "Read the alerts first (open below), then the documents. Ask: does the evidence explain every alert (CLOSE)? Is there a sign of crime (ESCALATE)? Otherwise, would one document or answer settle it (RFI)? Use the institution's POLICY.md: the SOP decides."),
+        el("p", "note", `Our system currently says ${it.system.verdict} · ${it.system.reason_code}. Make up your own mind before looking at that.`)));
     }
+    d.append(sec("Case file", caseViewer(it.case_text)));
+    const preset = tab === "look" ? (it.label || null) : tab === "settled" ? { verdict: it.verdict, reason_code: it.reason_code } : null;
+    d.append(sec(tab === "new" ? "Your label" : "Change or confirm the label", labelForm(it, preset)));
   }
 
   $("#tab-look").addEventListener("click", () => { tab = "look"; current = queue[0] && queue[0].case_id; renderList(); renderDetail(); });
   $("#tab-settled").addEventListener("click", () => { tab = "settled"; current = settled[0] && settled[0].case_id; renderList(); renderDetail(); });
+  $("#tab-new").addEventListener("click", () => { tab = "new"; const f = fresh.find((x) => !decisions[x.case_id]) || fresh[0]; current = f && f.case_id; renderList(); renderDetail(); });
   renderList();
 
   (async () => {
@@ -200,6 +263,10 @@
     db.collection("settled").onSnapshot((snap) => {
       settled = snap.docs.filter((s) => s.exists).map((s) => s.data()).sort((a, b) => a.case_id.localeCompare(b.case_id));
       renderList(); if (tab === "settled") renderDetail();
+    });
+    db.collection("newcases").onSnapshot((snap) => {
+      fresh = snap.docs.filter((s) => s.exists).map((s) => s.data()).sort((a, b) => a.institution.localeCompare(b.institution) || b.shape_size - a.shape_size);
+      renderList(); if (tab === "new") renderDetail();
     });
     db.collection("decisions").onSnapshot(async (snap) => {
       decisions = {}; for (const s of snap.docs) if (s.exists) decisions[s.id] = s.data();
