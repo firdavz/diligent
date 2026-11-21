@@ -254,7 +254,8 @@ def _own_facts(b: CaseBundle, txns: list[dict], own: dict[str, Doc]) -> str:
     joint = len(docs) == 1 and len(_holders(b.docs[docs[0]])) > 1
     held_by = (f"jointly held by {' and '.join(_holders(b.docs[docs[0]]))}" if joint
                else f"held by {b.customer.get('name')}")
-    return (f"Statement{s} {' and '.join(docs)} show{'' if s else 's'} that account{s} {' and '.join(accts)} "
+    named = [a if a.lower().startswith(("account", "iban")) else f"account {a}" for a in accts]
+    return (f"Statement{s} {' and '.join(docs)} show{'' if s else 's'} that {' and '.join(named)} "
             f"{'are' if s else 'is'} {held_by}, so {' and '.join(moves)} moved between the "
             f"customer's own accounts")
 
@@ -311,8 +312,61 @@ def own_account(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- RETURNING_CUSTOMER (TM07)
+
+_REVERIFIED = re.compile(r"re-?verified\s+on\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})", re.I)
+
+
+def _reverification(b: CaseBundle, start: date, dormant_days: int) -> tuple[Doc, date] | None:
+    """A record that the customer's identity was re-verified while the account was dormant, on or before the day it
+    moved again. The date is read from the record's own words ('re-verified on 18 August 2026')."""
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        m = _REVERIFIED.search(doc.text)
+        d = parse_date(m[1]) if m else None
+        if d and 0 <= (start - d).days <= dormant_days:
+            return doc, d
+    return None
+
+
+def returning_customer(b: CaseBundle) -> Checks:
+    """TM07: a verified customer resumed using a dormant account. Identity re-verified during the dormancy, on or
+    before the reactivation, and the money that woke the account came from an account a statement shows the customer
+    holds; what is left unexplained moved less than the alert's limit."""
+    signals: list[Signal] = []
+    for a in b.alerts:
+        if a.get("rule_id") != "TM07":
+            continue
+        m = a.get("measured", {})
+        txns = b.alert_txns(a)
+        dates = [d for d in (_txn_date(t) for t in txns) if d]
+        limit, dormant = m.get("limit_gbp"), m.get("dormant_days")
+        if not dates or not limit or not dormant:
+            continue
+        start = min(dates)
+        rv = _reverification(b, start, int(dormant))
+        if not rv:
+            continue
+        own = {t["transaction_id"]: doc for t in txns if t.get("direction") == "in"
+               for doc in [_statement_for(b, t)] if doc}
+        if not own or sum(t["amount_gbp"] for t in _not_own(txns, own)) >= limit:
+            continue
+        rv_doc, rv_date = rv
+        gap = (start - rv_date).days
+        when = "the same day as" if gap == 0 else "the day before" if gap == 1 else f"{gap} days before"
+        own_facts = _own_facts(b, txns, own)
+        facts = (f"Identity was re-verified on {fmt_date(rv_date)} ({rv_doc.doc_id}), {when} the account moved again "
+                 f"after {dormant} days dormant, and {own_facts[0].lower()}{own_facts[1:]}.")
+        signals.append(Signal(
+            alert_id=a["alert_id"], kind="explains", code="RETURNING_CUSTOMER", facts=facts,
+            evidence=list(dict.fromkeys([rv_doc.doc_id] + [d.doc_id for d in own.values()] + sorted(own))),
+            strength="hard", source="explainers.returning_customer",
+        ))
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Next: returning_customer (TM07), own account on payments and FX (outgoing own-account transfer), documented_event,
-# refund, invoice_matches, collection_documented, group_company, third_party_documented, within_profile.
+# Next: documented_event (insurer / settlement / solicitor letters, sale receipts; also closes TM07 payouts),
+# refund, invoice_matches (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
+# third_party_documented, own account on payments and FX (outgoing own-account transfer; needs a team decision).
 # list_match_different_party is Lorenzo's (red_flags.listed_party).
-CHECKS: list = [business_records, own_account]
+CHECKS: list = [business_records, own_account, returning_customer]

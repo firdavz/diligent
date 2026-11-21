@@ -218,5 +218,52 @@ class OwnAccount(unittest.TestCase):
         self.assertEqual(self.codes(own_bundle([alert], [self.SRC], txns)), [])
 
 
+class ReturningCustomer(unittest.TestCase):
+    CREDIT = xfer("T1", 12, "in", 7300.0, "account ending 4321")
+    SPEND = xfer("T2", 13, "out", 85.0, None, name="Shop", channel="card")
+    STMT = statement("STM-1", "Pat Example", "account ending 4321", "12 May 2026: transfer of £7,300.00.")
+
+    def rvf(self, day):
+        return doc("RVF-1", "reverification_record",
+                   f"Identity re-verified on {day} May 2026 with a live selfie on the registered device.")
+
+    def tm07(self, txns, dormant=240):
+        return {"alert_id": "A1", "rule_id": "TM07", "transaction_ids": [t["transaction_id"] for t in txns],
+                "measured": {"dormant_days": dormant, "limit_gbp": 5000}}
+
+    def codes(self, b):
+        from tm.explainers import returning_customer
+        return [(s.kind, s.code) for s in returning_customer(b)[0]]
+
+    def test_reverified_the_day_before_and_own_statement_closes(self):
+        txns = [self.CREDIT, self.SPEND]
+        from tm.explainers import returning_customer
+        s = returning_customer(own_bundle([self.tm07(txns)], [self.rvf(11), self.STMT], txns))[0]
+        self.assertEqual([(x.kind, x.code) for x in s], [("explains", "RETURNING_CUSTOMER")])
+        self.assertEqual(s[0].evidence, ["RVF-1", "STM-1", "T1"])
+        self.assertIn("the day before", s[0].facts)
+
+    def test_reverified_after_the_account_moved_explains_nothing(self):
+        txns = [self.CREDIT, self.SPEND]
+        self.assertEqual(self.codes(own_bundle([self.tm07(txns)], [self.rvf(14), self.STMT], txns)), [])
+
+    def test_reverified_before_the_dormancy_explains_nothing(self):
+        txns = [self.CREDIT, self.SPEND]
+        self.assertEqual(self.codes(own_bundle([self.tm07(txns, dormant=5)], [self.rvf(1), self.STMT], txns)), [])
+
+    def test_no_statement_for_the_money_explains_nothing(self):
+        txns = [self.CREDIT, self.SPEND]
+        self.assertEqual(self.codes(own_bundle([self.tm07(txns)], [self.rvf(11)], txns)), [])
+
+    def test_no_reverification_explains_nothing(self):
+        txns = [self.CREDIT, self.SPEND]
+        self.assertEqual(self.codes(own_bundle([self.tm07(txns)], [self.STMT], txns)), [])
+
+    def test_large_payment_out_left_unexplained_explains_nothing(self):
+        out = xfer("T3", 13, "out", 6000.0, "IBAN ending 9999", name="Supplier Co")
+        txns = [self.CREDIT, out]
+        self.assertEqual(self.codes(own_bundle([self.tm07(txns)], [self.rvf(11), self.STMT], txns)), [])
+
+
 if __name__ == "__main__":
     unittest.main()
