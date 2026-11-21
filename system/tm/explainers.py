@@ -1273,9 +1273,69 @@ def missing_document(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- TM10: early redemption with a documented reason
+
+REDEMPTION_LINK_DAYS = 7  # own top-up shortly before the purchase, proceeds out shortly after the sale
+_JOB_ENDED = re.compile(r"redundan|terminat|end of your employment|last working day", re.I)
+
+
+def _own_leg(b: CaseBundle, t: dict, direction: str, before: bool) -> dict | None:
+    """The customer's own-name transfer that funded a purchase (before) or received the proceeds (after)."""
+    td = _txn_date(t)
+    for e in sorted(b.txns.values(), key=lambda e: e.get("booked_at", "")):
+        ed = _txn_date(e)
+        if (e.get("direction") != direction or not same_name(e.get("counterparty_name"), b.customer.get("name"))
+                or not ed or not td):
+            continue
+        gap = (td - ed).days if before else (ed - td).days
+        enough = e["amount_gbp"] >= t["amount_gbp"] - 0.005 if before else _same_amount(e["amount_gbp"], t["amount_gbp"])
+        if 0 <= gap <= REDEMPTION_LINK_DAYS and enough:
+            return e
+    return None
+
+
+def early_redemption_explained(b: CaseBundle) -> Checks:
+    """TM10: fund units bought with the customer's own money and sold back early, the proceeds withdrawn to the
+    customer's own name, with the reason documented before the sale: a letter from the declared employer ending the
+    job and the customer's own request to sell."""
+    signals: list[Signal] = []
+    employer = b.customer.get("employer") or ""
+    for a in b.alerts:
+        if a.get("rule_id") != "TM10" or not employer:
+            continue
+        txns = b.alert_txns(a)
+        buys = [t for t in txns if t.get("direction") == "out"]
+        sells = [t for t in txns if t.get("direction") == "in"]
+        if not buys or not sells:
+            continue
+        funded = [_own_leg(b, t, "in", before=True) for t in buys]
+        paid_out = [_own_leg(b, t, "out", before=False) for t in sells]
+        if not all(funded) or not all(paid_out):
+            continue  # someone else's money in, or the proceeds to someone else: not this story
+        sold_on = min(_txn_date(t) for t in sells)
+        prior = [d for d in sorted(b.docs.values(), key=lambda d: d.doc_id)
+                 if _doc_date(d) and _doc_date(d) <= sold_on]
+        letter = next((d for d in prior if _mentioned(employer, f"{d.title}\n{d.text}") and _JOB_ENDED.search(d.text)), None)
+        request = next((d for d in prior if d is not letter and re.search(r"\bsell\b", d.text, re.I)), None)
+        if not letter or not request:
+            continue
+        facts = (f"{letter.doc_id} ({letter.title}, dated {fmt_date(_doc_date(letter))}) ends the customer's job at the "
+                 f"declared employer {employer} and {request.doc_id} (dated {fmt_date(_doc_date(request))}) asks to sell, "
+                 f"both before the units were sold on {fmt_date(sold_on)}; the units were bought with the customer's own "
+                 f"{money(funded[0]['amount_gbp'])} ({funded[0]['transaction_id']}) and the "
+                 f"{money(paid_out[0]['amount_gbp'])} proceeds went back to the customer ({paid_out[0]['transaction_id']}).")
+        signals.append(Signal(
+            alert_id=a["alert_id"], kind="explains", code="DOCUMENTED_EVENT", facts=facts,
+            evidence=list(dict.fromkeys([letter.doc_id, request.doc_id] + [t["transaction_id"] for t in buys + sells])),
+            strength="hard", source="explainers.early_redemption_explained",
+        ))
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Next: TM10 redundancy (DOCUMENTED_EVENT) (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
-# third_party_documented, own account on payments and FX (outgoing own-account transfer; needs a team decision).
-# list_match_different_party is Lorenzo's (red_flags.listed_party).
+# Left out on purpose: payments and FX shapes resting on an own-name account with no statement on file (own account,
+# purchase order, pre-pause supplier TM07) stay RFI by the POLICY's own-account clause (D19, decided with Fedya; open
+# question to the organisers in D20). list_match_different_party is Lorenzo's (red_flags.listed_party).
 CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches,
-                third_party_documented, collection_documented, group_company, missing_document]
+                third_party_documented, collection_documented, group_company, missing_document,
+                early_redemption_explained]

@@ -837,6 +837,41 @@ class MissingDocument(unittest.TestCase):
         self.assertEqual(self.run_twins(self.TM02, txns), [])
 
 
+class EarlyRedemption(unittest.TestCase):
+    CUSTOMER = {"name": "Pat Example", "employer": "Testhaven Architects LLP"}
+
+    def case(self, letter_from="Testhaven Architects LLP", buy_from="Pat Example", proceeds_to="Pat Example",
+             with_request=True):
+        top = txn("T1", "06-28", "in", 16000.0, buy_from, "56-07-09 91193703", "TOP UP")
+        buy = txn("T2", "06-29", "out", 16000.0, "Testfund Emerging Markets", None, "FUND BUY", channel="fund_subscription")
+        sell = txn("T3", "08-18", "in", 15600.0, "Testfund Emerging Markets", None, "FUND SELL", channel="fund_redemption")
+        out = txn("T4", "08-19", "out", 15600.0, proceeds_to, "89-83-80 21547849", "WITHDRAWAL")
+        docs = [dated_doc("RED-1", "redundancy_letter", f"{letter_from}\nDear Employee,\nYour role has been made redundant.",
+                          "2026-08-07", f"Letter from {letter_from}")]
+        if with_request:
+            docs.append(dated_doc("EML-1", "customer_email", "I have been made redundant and need to sell my fund.",
+                                  "2026-08-17", "Email from the customer"))
+        alert = {"alert_id": "A1", "rule_id": "TM10", "transaction_ids": ["T2", "T3"], "measured": {"held_days": 50}}
+        from tm.explainers import early_redemption_explained
+        return [s.code for s in early_redemption_explained(own_bundle([alert], docs, [top, buy, sell, out],
+                                                                      customer=self.CUSTOMER))[0]]
+
+    def test_redundancy_from_the_declared_employer_and_a_request_to_sell_close(self):
+        self.assertEqual(self.case(), ["DOCUMENTED_EVENT"])
+
+    def test_letter_from_another_employer_explains_nothing(self):
+        self.assertEqual(self.case(letter_from="Other Company Ltd"), [])
+
+    def test_units_bought_with_someone_elses_money_explain_nothing(self):
+        self.assertEqual(self.case(buy_from="Third Party Person"), [])
+
+    def test_proceeds_paid_to_someone_else_explain_nothing(self):
+        self.assertEqual(self.case(proceeds_to="Third Party Person"), [])
+
+    def test_no_request_to_sell_explains_nothing(self):
+        self.assertEqual(self.case(with_request=False), [])
+
+
 class Greetings(unittest.TestCase):
     def test_one_word_greeting_is_a_role_not_another_person(self):
         from tm.explainers import _addressed_elsewhere
