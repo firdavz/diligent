@@ -18,6 +18,7 @@ stopping at the first that settles it; one rulebook makes every verdict, and mod
 | [`emoney-findings.md`](emoney-findings.md) | Same for e-money |
 | [`investment-findings.md`](investment-findings.md) | Same for investment |
 | [`payments_fx-findings.md`](payments_fx-findings.md) | Same for payments and FX |
+| [`board/`](board/) | The live team board: its page, dataset and latest snapshot |
 | [`kickoff-transcript.md`](kickoff-transcript.md) | The organisers' kick-off talk (Granola transcript) and what it means for us |
 | [`CLAUDE.md`](CLAUDE.md) | Rules for coding agents (Claude Code, Cursor, Codex) working in this repo |
 

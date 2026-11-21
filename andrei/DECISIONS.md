@@ -116,7 +116,7 @@ Teammates: keep your own notes in a folder named after you, like this one.
 - `python3 eval/audit.py <case_id>` prints one case's trail for the demo.
 - Verified: two back-to-back bank runs give the same `output_fp`.
 
-## D16 — Jev: real, but not on the endpoint the rules allow
+## D16 — Jev: real, but not on the endpoint the rules allow (superseded by D18: organisers allow it)
 - `typesafe/jev-1.13` exists on OpenRouter but is a **decisions model**: it answers only on `/api/alpha/decisions`, not
   `/api/v1/chat/completions` ("cannot be used with the chat/completions endpoint"). The rules allow models **only**
   through the chat-completions endpoint. `typesafe/jev-router` is on chat completions but routes each request to a
@@ -143,10 +143,34 @@ Teammates: keep your own notes in a folder named after you, like this one.
   story outside the scored path, or tier 2 only if a 5-run test shows it stable. The answer cache keeps repeat runs
   identical whatever the model. `system/tm/reader.py` `TIER_MODELS` is Fedya's to change. Supersedes the model choice in D13.
 
+## D18 — Organisers: any OpenRouter endpoint is allowed → decision models are in. Recommend Jev 1.13 for the reader
+- The organisers said to ignore the chat-completions-only wording: anything through OpenRouter (same `OPENROUTER_API_KEY`)
+  is allowed. This reverses D16.
+- **Decisions endpoint** `POST https://openrouter.ai/api/alpha/decisions` (alpha; shape may change):
+  `{"model": ..., "questions": {<id>: {"type": "noul"|"choice"|"score"|"box", "instructions": ..., "criteria": {...}}},
+  "state": <string | object | array>}` → `{"answers": {<id>: {"type": "noul", "noul": <probability of true>}}, "usage": {...}}`.
+  Typed questions in, one typed answer with its probability out. That is exactly our reader's job (B and C ask yes/no
+  questions; the rulebook decides), and the probability gives the audit trail a confidence per answer.
+  Docs: https://openrouter.ai/docs/client-sdks/python/sdks/decisions/README.md
+- Test (21 Nov), 5 identical calls per model on two support chats (one should be yes, one no):
+
+  | Model | Pinned snapshot | "yes" chat | "no" chat | Identical? | Cost/call | Time |
+  |---|---|---|---|---|---|---|
+  | `typesafe/jev-1.13` | `jev-1.13-20260917` | 0.98 ×5 | 0.02 ×5 | **5/5 byte-identical** | ~$0.00002 | 0.2s |
+  | `perplexity/pplx-decider-v1.3:free` | `-20261112` | 0.99906–0.99917 | 0.00056–0.00066 | values drift in the 4th decimal (same verdict after a threshold) | $0 (free tier, rate-limited) | 0.4s |
+  | `perplexity/pplx-decider-v1.3` (paid) | — | — | — | 404 "No endpoints found" — only `:free` exists | — | — |
+
+- **Recommendation for Fedya:** tier 1 = `typesafe/jev-1.13` on the decisions endpoint. Byte-identical across runs,
+  pinned snapshot, cheapest and fastest of everything tested, and returns a probability. Threshold it in code
+  (e.g. ≥ 0.9 → yes, ≤ 0.1 → no, else unknown → climbs to tier 2), and record the probability in the trace.
+  Tier 2 = `openai/gpt-4.1-mini` or the pinned `gpt-4o-mini-2024-07-18` on chat completions (D17), for questions Jev
+  leaves unknown. pplx-decider `:free` as a fallback only: free-tier rate limits are a risk when the judges run 800 cases ×5.
+- Cache every answer as before; round probabilities (e.g. to 2 dp) before thresholding so float drift can't flip anything.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
 - [ ] Is a pre-filled model cache acceptable? (D6)
-- [ ] Is OpenRouter's `/api/alpha/decisions` endpoint (Jev) allowed? Ask Ahmad (D16).
+- [x] OpenRouter's `/api/alpha/decisions` endpoint is allowed — organisers confirmed (D18).
 - [ ] Owners for A/B/C/D (see `TEAM.md`).
 - [ ] Measure real tier-1/tier-2 cost and latency on 20 cases; set the tier-2 cap (D13).

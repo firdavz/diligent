@@ -1,0 +1,258 @@
+<meta name="dash-one-writer">
+<style>
+  .tb { display: grid; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans); color: var(--color-fg); }
+  .tb-head { display: grid; gap: var(--cds-gap-sm); }
+  .tb-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+  .tb-lede { margin: 0; color: var(--color-fg-muted); max-width: 68ch; }
+  .tb-lede b { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); font-variant-numeric: tabular-nums; }
+  .tb-h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+  .tb-sub { margin: 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .tb-sec { display: grid; gap: var(--cds-gap-md); min-width: 0; }
+  .tb-streams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--cds-gap-md); min-height: 9rem; }
+  .tb-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: grid; gap: var(--cds-gap-sm); align-content: start; min-width: 0; }
+  .tb-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: var(--cds-gap-sm); }
+  .tb-letter { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); letter-spacing: .06em; text-transform: uppercase; }
+  .tb-who { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); }
+  .tb-role { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); margin: 0; }
+  .tb-big { font-family: var(--font-anthropic-serif); font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; line-height: 1; }
+  .tb-of { color: var(--color-fg-muted); font-size: var(--cds-font-size-body); }
+  .tb-bar { height: 6px; border-radius: 3px; background: var(--cds-chart-grid); overflow: hidden; }
+  .tb-bar > i { display: block; height: 100%; border-radius: 3px; }
+  .tb-last { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); overflow-wrap: anywhere; }
+  .tb-last .tb-when { color: var(--color-fg); }
+  .tb-stale .tb-when { color: var(--color-bad); }
+  .tb-wrap { overflow-x: auto; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-panel); }
+  .tb-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-body); font-variant-numeric: tabular-nums; }
+  .tb-table th { text-align: left; font-weight: var(--cds-font-weight-medium); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); padding: var(--cds-pad-sm) var(--cds-pad-md); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .tb-table td { padding: var(--cds-pad-sm) var(--cds-pad-md); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+  .tb-table tr:last-child td { border-bottom: 0; }
+  .tb-num { text-align: right; }
+  .tb-table th.tb-num { text-align: right; }
+  .tb-ok { color: var(--color-ok); }
+  .tb-badv { color: var(--color-bad); font-weight: var(--cds-font-weight-medium); }
+  .tb-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--cds-font-size-caption); white-space: nowrap; border: 1px solid currentColor; }
+  .tb-pill.done { color: var(--color-ok); }
+  .tb-pill.partial { color: var(--color-warn); }
+  .tb-pill.todo { color: var(--color-fg-muted); }
+  .tb-pill.wrong { color: var(--color-bad); }
+  .tb-ex { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); max-width: 52ch; }
+  .tb-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .tb-filters { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; }
+  .tb-filters label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); display: flex; gap: var(--cds-gap-xs); align-items: center; }
+  .tb-fp { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--cds-font-size-caption); }
+  .tb-empty { color: var(--color-fg-muted); padding: var(--cds-pad-md); }
+</style>
+
+<div class="tb">
+  <header class="tb-head" id="top">
+    <h1 class="tb-title">Track 1 Build Board</h1>
+    <p class="tb-lede"><b data-draw="done" data-source="summary">—</b> of <b data-draw="total" data-source="summary">—</b> checks pass. Wrongful closes on the labelled cases: <b data-draw="wrongful" data-source="summary">—</b>. Institutions giving identical output across two runs: <b data-draw="repro" data-source="summary">—</b> of 4.</p>
+    <p class="tb-sub">Rebuilt every 20 minutes from the team branch: the system is run on all four institutions, scored against the 226 hand labels, and run twice to compare output fingerprints.</p>
+  </header>
+
+  <section class="tb-sec" id="streams">
+    <h2 class="tb-h2">The four streams</h2>
+    <div class="tb-streams" data-draw="streams" data-source="streams"></div>
+  </section>
+
+  <section class="tb-sec" id="institutions">
+    <h2 class="tb-h2">Score by institution</h2>
+    <p class="tb-sub">Cost saved is the share of the escalate-everything cost the system saves on the labelled cases, as the judges score it. A wrongful close costs 10.</p>
+    <div class="tb-wrap">
+      <table class="tb-table" data-source="scores" data-row-key="institution">
+        <thead><tr>
+          <th data-field="institution">Institution</th>
+          <th class="tb-num" data-field="cost_saved_pct">Cost saved</th>
+          <th class="tb-num" data-field="wrongful_closes">Wrongful closes</th>
+          <th class="tb-num" data-field="closable_closed">Closable closed</th>
+          <th class="tb-num" data-field="right_verdicts">Right verdicts</th>
+          <th data-source="repro" data-field="identical">Two runs identical</th>
+        </tr></thead>
+        <tbody data-draw="scores"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="tb-sec" id="checks">
+    <h2 class="tb-h2">Every check</h2>
+    <p class="tb-sub">Each institution's verdict-and-reason pairs from the hand labels, plus the core and reader capabilities. Done means every labelled case of that kind gets the right verdict.</p>
+    <div class="tb-filters">
+      <label for="tb-stream">Stream
+        <select class="dash-select" id="tb-stream" aria-label="Stream">
+          <option value="">All streams</option>
+          <option value="Andrei">A — Andrei</option>
+          <option value="Clotilde">B — Clotilde</option>
+          <option value="Lorenzo">C — Lorenzo</option>
+          <option value="Fedya">D — Fedya</option>
+        </select>
+      </label>
+      <label for="tb-status">Status
+        <select class="dash-select" id="tb-status" aria-label="Status">
+          <option value="">Any status</option>
+          <option value="open">Not done yet</option>
+          <option value="done">Done</option>
+          <option value="wrong close">Wrong close</option>
+        </select>
+      </label>
+    </div>
+    <div class="tb-wrap">
+      <table class="tb-table" data-source="checks" data-row-key="key">
+        <thead><tr>
+          <th data-field="status">Status</th>
+          <th data-field="stream">Stream</th>
+          <th data-field="institution">Institution</th>
+          <th data-field="check">Check</th>
+          <th class="tb-num" data-field="cases_right">Cases right</th>
+          <th data-field="example">Example from the labels</th>
+        </tr></thead>
+        <tbody data-draw="checks"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+  const pick = (t) => (rows) => rows.filter((r) => r.table === t);
+  dash.calc('streams', {inputs: ['board'], title: 'Streams', description: 'The four work streams: checks done per owner and their last push.', fn: pick('streams')});
+  dash.calc('checks', {inputs: ['board'], title: 'Checks', description: 'Every check with its status on the labelled cases.', fn: pick('checks')});
+  dash.calc('scores', {inputs: ['board'], title: 'Scores', description: 'Score per institution against the hand labels.', fn: pick('scores')});
+  dash.calc('repro', {inputs: ['board'], title: 'Reproducibility', description: 'Output fingerprints of two back-to-back runs per institution.', fn: pick('repro')});
+  dash.calc('summary', {
+    inputs: ['board'], title: 'Summary', description: 'Checks done, wrongful closes and reproducible institutions.',
+    fn: (board) => {
+      const checks = board.filter((r) => r.table === 'checks');
+      const scores = board.filter((r) => r.table === 'scores');
+      const repro = board.filter((r) => r.table === 'repro');
+      return [{
+        done: checks.filter((c) => c.status === 'done').length,
+        total: checks.length,
+        wrongful: scores.reduce((s, r) => s + Number(r.wrongful_closes), 0),
+        repro: repro.filter((r) => Number(r.identical) === 1).length,
+      }];
+    },
+  });
+</script>
+
+<script>
+  const ago = (iso) => {
+    if (!iso) return null;
+    const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)} h ${m % 60} min ago`;
+  };
+  for (const [name, field] of [['done', 'done'], ['total', 'total'], ['wrongful', 'wrongful'], ['repro', 'repro']]) {
+    dash.draw(name, (el) => {
+      const s = dash.data('summary');
+      el.setAttribute('data-field', field);
+      el.setAttribute('data-row', '0');
+      el.textContent = s.status === 'ok' && s.data[0] ? String(s.data[0][field]) : '—';
+      el.classList.toggle('tb-badv', field === 'wrongful' && s.status === 'ok' && s.data[0] && s.data[0].wrongful > 0);
+    });
+  }
+
+  dash.draw('streams', (el) => {
+    const s = dash.data('streams');
+    if (s.status !== 'ok') {
+      el.textContent = s.status === 'error' ? 'The board data did not load.' : '—';
+      return;
+    }
+    [...el.childNodes].forEach((n) => { if (n.nodeType !== 1 || n.tagName !== 'ARTICLE') n.remove(); });
+    const cards = d3.select(el).selectAll('article').data(s.data, (d) => d.owner).join((enter) => {
+      const a = enter.append('article').attr('class', 'tb-card');
+      const top = a.append('div').attr('class', 'tb-card-top');
+      top.append('span').attr('class', 'tb-who');
+      top.append('span').attr('class', 'tb-letter');
+      a.append('p').attr('class', 'tb-role');
+      const n = a.append('div');
+      n.append('span').attr('class', 'tb-big').attr('data-field', 'checks_done');
+      n.append('span').attr('class', 'tb-of');
+      a.append('div').attr('class', 'tb-bar').append('i');
+      const last = a.append('div').attr('class', 'tb-last');
+      last.append('span').attr('class', 'tb-when');
+      last.append('span').attr('class', 'tb-msg');
+      return a;
+    });
+    cards.select('.tb-who').text((d) => d.owner);
+    cards.select('.tb-letter').text((d) => `Stream ${d.stream.split(' ')[0]}`);
+    cards.select('.tb-role').text((d) => d.role);
+    cards.select('.tb-big').attr('data-source', 'streams').attr('data-where', (d) => `owner=${encodeURIComponent(d.owner)}`).text((d) => d.checks_done);
+    cards.select('.tb-of').text((d) => ` of ${d.checks_total} checks`);
+    cards.select('.tb-bar i')
+      .style('width', (d) => `${d.checks_total ? (100 * d.checks_done) / d.checks_total : 0}%`)
+      .style('background', (d, i) => dash.colors[i % dash.colors.length]);
+    cards.classed('tb-stale', (d) => !d.last_push || (Date.now() - new Date(d.last_push).getTime()) > 45 * 60000);
+    cards.select('.tb-when').text((d) => (d.last_push ? `Last push ${ago(d.last_push)}` : 'Nothing pushed yet'));
+    cards.select('.tb-msg').text((d) => (d.last_push ? ` · ${d.last_commit}` : ''));
+  });
+
+  dash.draw('scores', (tbody) => {
+    const s = dash.data('scores');
+    const r = dash.data('repro');
+    if (s.status !== 'ok') {
+      tbody.replaceChildren();
+      const tr = tbody.insertRow();
+      const td = tr.insertCell();
+      td.colSpan = 6;
+      td.className = 'tb-empty';
+      td.textContent = s.status === 'error' ? 'Scores did not load.' : '—';
+      return;
+    }
+    const same = new Map((r.status === 'ok' ? r.data : []).map((x) => [x.institution, x]));
+    tbody.replaceChildren();
+    const rows = d3.select(tbody).selectAll('tr').data(s.data).join('tr');
+    rows.attr('data-key', (d) => encodeURIComponent(d.institution));
+    rows.append('td').text((d) => d.institution);
+    rows.append('td').attr('class', 'tb-num').text((d) => `${d.cost_saved_pct}%`);
+    rows.append('td').attr('class', (d) => `tb-num ${Number(d.wrongful_closes) ? 'tb-badv' : 'tb-ok'}`).text((d) => d.wrongful_closes);
+    rows.append('td').attr('class', 'tb-num').text((d) => `${d.closable_closed} of ${d.closable_total}`);
+    rows.append('td').attr('class', 'tb-num').text((d) => `${d.right_verdicts} of ${d.labelled}`);
+    rows.append('td').each(function (d) {
+      const x = same.get(d.institution);
+      const td = d3.select(this);
+      if (!x) { td.text('—'); return; }
+      td.append('span').attr('class', Number(x.identical) ? 'tb-ok' : 'tb-badv').text(Number(x.identical) ? 'Yes ' : 'No ');
+      td.append('span').attr('class', 'tb-fp').text(x.run_1 === x.run_2 ? x.run_1 : `${x.run_1} ≠ ${x.run_2}`);
+    });
+  });
+
+  const order = {'wrong close': 0, todo: 1, partial: 2, done: 3};
+  const label = {'wrong close': 'Wrong close', todo: 'To do', partial: 'Partly', done: 'Done'};
+  dash.draw('checks', (tbody) => {
+    const c = dash.data('checks');
+    tbody.replaceChildren();
+    if (c.status !== 'ok') {
+      const td = tbody.insertRow().insertCell();
+      td.colSpan = 6;
+      td.className = 'tb-empty';
+      td.textContent = c.status === 'error' ? 'Checks did not load.' : '—';
+      return;
+    }
+    const who = document.querySelector('#tb-stream')?.value || '';
+    const st = document.querySelector('#tb-status')?.value || '';
+    const rows = c.data
+      .filter((d) => !who || d.stream === who)
+      .filter((d) => !st || (st === 'open' ? d.status !== 'done' : d.status === st))
+      .sort((a, b) => (order[a.status] - order[b.status]) || a.stream.localeCompare(b.stream) || a.institution.localeCompare(b.institution));
+    if (!rows.length) {
+      const td = tbody.insertRow().insertCell();
+      td.colSpan = 6;
+      td.className = 'tb-empty';
+      td.textContent = 'No checks match these filters.';
+      return;
+    }
+    const tr = d3.select(tbody).selectAll('tr').data(rows).join('tr').attr('data-key', (d) => encodeURIComponent(d.key));
+    tr.append('td').append('span').attr('class', (d) => `tb-pill ${d.status === 'wrong close' ? 'wrong' : d.status}`).text((d) => label[d.status] || d.status);
+    tr.append('td').text((d) => d.stream);
+    tr.append('td').text((d) => d.institution);
+    tr.append('td').each(function (d) {
+      const td = d3.select(this);
+      td.append('div').text(d.check);
+      if (d.verdict !== '-') td.append('div').attr('class', 'tb-code').text(`${d.verdict} · ${d.code}`);
+    });
+    tr.append('td').attr('class', 'tb-num').text((d) => `${d.cases_right} of ${d.cases}`);
+    tr.append('td').attr('class', 'tb-ex').text((d) => d.example || '');
+  });
+
+  document.querySelectorAll('#tb-stream, #tb-status').forEach((sel) => {
+    sel.addEventListener('change', () => dash.draw('checks'));
+  });
+</script>
