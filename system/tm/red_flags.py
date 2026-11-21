@@ -341,6 +341,33 @@ def third_party_story(b: CaseBundle) -> Checks:
     return signals, questions
 
 
+# --------------------------------------------------------------------------- dissolved counterparties
+
+def dissolved_counterparty(b: CaseBundle) -> Checks:
+    """Money moving with a company the register says had already been dissolved on the payment date."""
+    signals: list[Signal] = []
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        status = doc.fields.get("status", "")
+        gone = re.match(r"dissolved on (.+)", status, re.I)
+        company = doc.fields.get("company") or re.sub(r"^.*? for ", "", doc.title or "")
+        if not gone or not company:
+            continue
+        end = parse_date(gone[1])
+        for a in b.alerts:
+            for t in b.alert_txns(a):
+                paid = _txn_date(t)
+                if end and paid and paid > end and same_name(t.get("counterparty_name"), company):
+                    inbound = t.get("direction") == "in"
+                    signals.append(Signal(
+                        alert_id=a["alert_id"], kind="red_flag",
+                        code="ESC_THIRD_PARTY_FUNDING" if inbound else "ESC_UNEXPLAINED_FUNDS",
+                        facts=(f"{company} {'paid' if inbound else 'was paid'} {money(t['amount_gbp'])} on {fmt_date(paid)}, but the "
+                               f"register ({doc.doc_id}) shows it was dissolved on {fmt_date(end)}, so the payment cannot be genuine trade."),
+                        evidence=[doc.doc_id, t["transaction_id"]], source="red_flags.dissolved_counterparty"))
+                    break
+    return signals, []
+
+
 # --------------------------------------------------------------------------- orchestration
 
 def red_flags(b: CaseBundle) -> Checks:
@@ -353,7 +380,7 @@ def red_flags(b: CaseBundle) -> Checks:
     return signals, questions
 
 
-CHECKS: list = [listed_party, fraud_report, structuring_intent, third_party_story]
+CHECKS: list = [listed_party, fraud_report, structuring_intent, third_party_story, dissolved_counterparty]
 # Next, once the labels show what separates the traps: mule/pass-through patterns in the transactions
 # (receive-and-forward to linked parties), undeclared high-risk country with third parties,
 # device/login anomalies (account misuse), early redemption with no documented reason.

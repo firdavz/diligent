@@ -88,6 +88,20 @@ class RedFlags(unittest.TestCase):
         alert = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1"], "measured": {}}
         self.assertEqual(self.codes(bundle([alert], [chat], [TXN])), [("red_flag", "ESC_MULE_ACTIVITY")])
 
+    def test_payer_dissolved_before_the_payment(self):
+        reg = doc("REG-1", "company_register_extract",
+                  "# Company register extract for Gone Trading Ltd\n**Company:** Gone Trading Ltd\n**Status:** Dissolved on 7 October 2025\n")
+        txn = dict(TXN, counterparty_name="Gone Trading Ltd")
+        alert = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1"], "measured": {}}
+        self.assertEqual(self.codes(bundle([alert], [reg], [txn])), [("red_flag", "ESC_THIRD_PARTY_FUNDING")])
+
+    def test_payer_dissolved_after_the_payment_is_fine(self):
+        reg = doc("REG-1", "company_register_extract",
+                  "# Company register extract for Gone Trading Ltd\n**Company:** Gone Trading Ltd\n**Status:** Dissolved on 7 October 2027\n")
+        txn = dict(TXN, counterparty_name="Gone Trading Ltd")
+        alert = {"alert_id": "A1", "rule_id": "TM08", "transaction_ids": ["T1"], "measured": {}}
+        self.assertEqual(self.codes(bundle([alert], [reg], [txn])), [])
+
     def test_ordinary_contact_note_raises_nothing(self):
         note = doc("NTE-2", "contact_note", "Customer called to set up a standing order. Guided them through the app.")
         alert = {"alert_id": "A1", "rule_id": "TM01", "transaction_ids": [], "measured": {}}
