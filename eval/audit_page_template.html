@@ -1,0 +1,150 @@
+<title>Decision Audit Trail</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a case picker on top, then one decision laid out as a ladder of yes/no questions, then the run proof. */
+  :root {
+    --bg: #f3f4f1; --panel: #ffffff; --well: #edefea; --fg: #1b201c; --muted: #5b645d; --line: #d8dcd4;
+    --yes: #2f7d4f; --no: #8a938c; --close: #2f7d4f; --rfi: #a36a00; --esc: #b3372b; --accent: #2f6b4f;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #121613; --panel: #1a1f1b; --well: #222823; --fg: #e4e8e3; --muted: #99a39b; --line: #2f372f;
+    --yes: #6fbf95; --no: #78827a; --close: #6fbf95; --rfi: #e0a84a; --esc: #ef7b6e; --accent: #6fbf95; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #121613; --panel: #1a1f1b; --well: #222823; --fg: #e4e8e3; --muted: #99a39b; --line: #2f372f;
+    --yes: #6fbf95; --no: #78827a; --close: #6fbf95; --rfi: #e0a84a; --esc: #ef7b6e; --accent: #6fbf95; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14.5px; line-height: 1.5; }
+  .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 22px 40px; display: grid; gap: 18px; max-width: 1040px; margin: 0 auto; }
+  h1 { font-size: 24px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+  h2 { font-size: 16px; font-weight: 600; margin: 0; }
+  .lede { margin: 6px 0 0; color: var(--muted); max-width: 72ch; }
+  .picker { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 5px 12px; cursor: pointer; font: inherit; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+  .chip[aria-pressed="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .v-CLOSE { color: var(--close); } .v-RFI { color: var(--rfi); } .v-ESCALATE { color: var(--esc); }
+  .bg-CLOSE { background: var(--close); } .bg-RFI { background: var(--rfi); } .bg-ESCALATE { background: var(--esc); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 12px; min-width: 0; }
+  .verdict { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; }
+  .verdict .big { font-size: 26px; font-weight: 600; letter-spacing: .01em; }
+  .mono { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+  .muted { color: var(--muted); }
+  .reason { margin: 0; max-width: 80ch; }
+  .ev { display: flex; flex-wrap: wrap; gap: 4px; }
+  .ev span { font-family: var(--mono); font-size: 12px; background: var(--well); border-radius: 4px; padding: 1px 6px; }
+  .alert { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 10px; }
+  .alert-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+  .rule { font-family: var(--mono); font-weight: 500; }
+  .ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; counter-reset: q; }
+  .q { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; align-items: start; }
+  .q .n { counter-increment: q; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; border: 1.5px solid var(--no); color: var(--no); }
+  .q .n::before { content: counter(q); }
+  .q.yes .n { border-color: var(--yes); color: var(--yes); }
+  .q.skip { opacity: .5; }
+  .q .text { font-weight: 500; }
+  .q .ans { font-size: 12.5px; font-weight: 600; letter-spacing: .04em; margin-left: 8px; }
+  .q.yes .ans { color: var(--yes); } .q.no .ans { color: var(--no); }
+  .q .why { grid-column: 2; color: var(--muted); font-size: 13.5px; display: grid; gap: 4px; }
+  .sop { border-left: 3px solid var(--accent); background: var(--well); padding: 6px 10px; border-radius: 0 6px 6px 0; font-size: 13px; }
+  .rulebox { background: var(--well); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .tablewrap { overflow-x: auto; }
+  .ok { color: var(--yes); font-weight: 600; }
+  @media (prefers-reduced-motion: no-preference) { .chip { transition: border-color .12s ease-out; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Decision Audit Trail</h1>
+    <p class="lede">We don't ask an AI to judge a case. Each institution's SOP becomes a ladder of yes/no questions per alert; a fixed rulebook turns the answers into CLOSE, RFI or ESCALATE. Every answer shows the clause, the facts and the documents behind it, and the same inputs give the same decision on every run.</p>
+  </header>
+  <nav class="picker" id="picker" aria-label="Example cases"></nav>
+  <section class="card" id="case" aria-live="polite"></section>
+  <section class="card" aria-labelledby="repro-h">
+    <h2 id="repro-h">Reproducibility: five runs, one answer</h2>
+    <p class="reason muted">Each run of the whole development set is fingerprinted (a hash of the output file). Identical fingerprints mean identical verdicts, reason codes, reasons and evidence for every case.</p>
+    <div class="tablewrap"><table id="repro"></table></div>
+  </section>
+</div>
+
+<script>
+const DATA = __DATA__;
+const NAME = {bank: "Bank", emoney: "E-money", investment: "Investment", payments_fx: "Payments and FX"};
+const $ = (s) => document.querySelector(s);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+const QUESTIONS = [
+  { path: "red_flag", text: "Is there a sign of crime on this alert?", then: "ESCALATE" },
+  { path: "explained", text: "Does hard evidence on file explain this alert?", then: "CLOSE" },
+  { path: "partial", text: "Would one specific document or answer settle it?", then: "RFI" },
+  { path: "held_payment_invoice", text: "Does the SOP's invoice rule hold the payment?", then: "RFI" },
+  { path: "fallback", text: "Nothing settles it: apply the rule's default", then: null },
+];
+
+function renderCase(c) {
+  const box = $("#case"); box.replaceChildren();
+  const v = el("div", "verdict");
+  v.append(el("span", `big v-${c.verdict}`, c.verdict), el("span", "mono", c.reason_code), el("span", "muted", `${NAME[c.institution]} · ${c.case_id}`));
+  const agree = el("span", "ok", c.label.verdict === c.verdict ? "Matches our hand label" : "");
+  v.append(agree);
+  box.append(v, el("p", "reason", c.reason));
+  const ev = el("div", "ev"); ev.append(el("span", "muted", "Evidence cited:")); for (const e of c.evidence) ev.append(el("span", null, e)); box.append(ev);
+
+  c.alerts.forEach((a, i) => {
+    const sec = el("div", "alert");
+    const head = el("div", "alert-head");
+    head.append(el("span", "rule", `Alert ${i + 1} · ${a.rule_id}`), el("span", `v-${a.verdict}`, `→ ${a.verdict}`), el("span", "mono muted", a.alert_id));
+    sec.append(head);
+    const ladder = el("ol", "ladder");
+    let reached = false;
+    for (const q of QUESTIONS) {
+      if (q.path === "held_payment_invoice" && a.path !== q.path) continue;
+      const hit = a.path === q.path;
+      const li = el("li", "q " + (reached ? "skip" : hit ? "yes" : "no"));
+      const num = el("span", "n");
+      const txt = el("div"); txt.append(el("span", "text", q.text));
+      txt.append(el("span", "ans", reached ? "not asked" : hit ? (q.then ? `YES → ${q.then}` : `→ ${a.verdict}`) : "NO"));
+      li.append(num, txt);
+      if (hit) {
+        const why = el("div", "why");
+        (a.facts || []).forEach((f, k) => { const p = el("div"); p.append(el("span", "mono", `${(a.codes || [])[k] || ""} `), document.createTextNode(f)); why.append(p); });
+        if ((a.evidence || []).length) why.append(el("div", "mono", "Evidence: " + [...new Set(a.evidence)].join(", ")));
+        for (const s of (a.sop || [])) why.append(el("div", "sop", s.replace(/\*\*/g, "")));
+        li.append(why); reached = true;
+      }
+      ladder.append(li);
+    }
+    sec.append(ladder); box.append(sec);
+  });
+  const rb = el("div", "rulebox");
+  rb.append(el("b", null, "Case rule: "), document.createTextNode(`the worst alert wins (ESCALATE > RFI > CLOSE), and a case closes only when every alert is explained by hard evidence. Result: ${c.verdict}.`));
+  box.append(rb);
+  const fpb = el("div", "mono muted");
+  fpb.textContent = `input ${c.audit.input_fp || "—"} · policy ${c.audit.policy_fp || "—"} · decision ${c.audit.decision_fp || "—"}`;
+  box.append(fpb);
+}
+
+const picker = $("#picker"); let current = null;
+DATA.cases.forEach((c, i) => {
+  const b = el("button", "chip"); b.type = "button"; b.setAttribute("aria-pressed", "false");
+  b.append(el("span", `dot bg-${c.verdict}`), document.createTextNode(`${NAME[c.institution]} · ${c.verdict}`));
+  b.addEventListener("click", () => { picker.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); renderCase(c); });
+  picker.append(b); if (i === 0) { b.setAttribute("aria-pressed", "true"); renderCase(c); }
+});
+
+const t = $("#repro");
+const hr = el("tr"); for (const h of ["Institution", "Cases", "Run 1", "Run 2", "Run 3", "Run 4", "Run 5", "Identical", "Code", "SOP"]) hr.append(el("th", null, h));
+t.append(hr);
+for (const r of DATA.repro) {
+  const tr = el("tr"); tr.append(el("td", null, NAME[r.institution]), el("td", null, r.cases.toLocaleString("en-GB")));
+  for (let i = 0; i < 5; i++) tr.append(el("td", "mono", r.runs[i] || "—"));
+  const same = r.runs.length === 5 && new Set(r.runs).size === 1;
+  tr.append(el("td", same ? "ok" : "", same ? "Yes, 5 of 5" : "—"), el("td", "mono", r.code_fp), el("td", "mono", r.policy_fp));
+  t.append(tr);
+}
+</script>

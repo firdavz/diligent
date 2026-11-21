@@ -198,6 +198,27 @@ Teammates: keep your own notes in a folder named after you, like this one.
 - **Keep the remaining credit for the reader** (Jev costs ~$0.00002 a call). More blind labelling needs a top-up first, and
   then one job at a time with ≤ 4 workers.
 
+## D21 — BinEval: "ask, don't judge" is our design, with a published method behind it
+- Paper: Cho et al., *Ask, Don't Judge: Binary Questions for Interpretable LLM Evaluation and Self-Improvement*
+  (BinEval), https://arxiv.org/abs/2606.27226. It breaks a judgement into atomic yes/no questions, has a model answer
+  each independently, and combines the answers with fixed rules. That beats holistic model judges on accuracy, avoids
+  their inflated scores, and gives question-level feedback to improve the questions.
+- Mapping to our system:
+
+  | BinEval | Ours | Criterion |
+  |---|---|---|
+  | Criteria → atomic binary questions | Each institution's **SOP** → yes/no questions per alert ("Does a document show the customer holds this account?", "Was the listed person still a PSC on the payment date?") | Explainability |
+  | A model answers each question independently | **Jev 1.13** typed questions (`noul`/`choice`) with a probability, cached; code answers what is arithmetic (amount to the penny, dates, thresholds) | Reproducibility |
+  | Fixed aggregation into a score | The **rulebook** (`decide.py`): red flag → ESCALATE; hard evidence on every alert → CLOSE; else RFI. The model never picks a verdict | Determinism |
+  | Question-level feedback improves prompts | Labels show **which question** gets a case wrong; fix that question, keep the trail of why | Creativity, self-improvement |
+
+- **Auditability:** each decision's trail lists every question, its answer (and Jev's probability), the document read and
+  the SOP clause, replayable from the fingerprints. Viewer: the Decision Audit Trail artifact (`andrei/audit-viewer/`,
+  built by `python3 eval/audit_page.py <out.html> <runs_dir>`).
+- **Pitch line:** "We don't ask an AI to judge a case. We turn each institution's SOP into yes/no questions, answer them
+  with a pinned decision model, and let a fixed rulebook decide: reproducible and audit-ready down to the clause."
+- **Verified 21 Nov:** 5 runs × 4 institutions (4,000 cases) → the same output fingerprint every time.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
