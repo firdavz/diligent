@@ -905,7 +905,7 @@ class DeclaredFunding(unittest.TestCase):
         undeclared = {**self.CLIENT, "declared": {"expected_channels": ["Bank transfer"]}}
         self.assertEqual(self.codes([self.tm01(3.25)], [self.STMT], [self.FUND, self.OUT], undeclared), [])
 
-    def test_order_backed_supplier_payment_closes_with_invoice_matches(self):
+    def test_order_backed_supplier_payment_asks_for_the_funding_account_statement(self):
         out = txn("T2", "09-12", "out", 964993.18, "Testdale Export Co", "IBAN ending 7856", "PO 39026", channel="swift")
         fund = {**self.FUND, "booked_at": "2026-09-11T10:00:00Z", "amount_gbp": 994838.33}
         inv = dated_doc("INV-1", "supplier_invoice", "**Buyer:** Testley Supplies Ltd\n**Order:** PO 39026\n"
@@ -914,7 +914,7 @@ class DeclaredFunding(unittest.TestCase):
         po = dated_doc("ORD-1", "purchase_order", "Dear Testley Supplies Ltd Team,\nOur order PO 39026.", "2026-08-24",
                        "Purchase order from Buyer Hotels Ltd")
         alert = {**self.tm01(4.13), "measured": {**self.tm01(4.13)["measured"], "received_gbp": 994838.33}}
-        self.assertEqual(self.codes([alert], [inv, po], [fund, out]), [("explains", "INVOICE_MATCHES")])
+        self.assertEqual(self.codes([alert], [inv, po], [fund, out]), [("partial", "RFI_SOURCE_OF_FUNDS")])  # never CLOSE
         self.assertEqual(self.codes([alert], [inv], [fund, out]), [])  # no buyer's purchase order on file
 
     def test_tm07_reverified_with_declared_funding_and_an_invoiced_payment_closes(self):

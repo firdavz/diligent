@@ -1402,7 +1402,8 @@ def declared_funding(b: CaseBundle) -> Checks:
     """Payments and FX: the client funds its account from its own bank account, as declared. A funding that goes
     straight on (≥ 90% within 2 days) is explained by where it went:
     - to an account a statement shows the client holds → OWN_ACCOUNT (TM01 at ≥ own_account_rfi_multiple → RFI);
-    - to a supplier whose invoice matches, for a buyer's purchase order with the same number → INVOICE_MATCHES.
+    - to a supplier whose invoice matches, for a buyer's purchase order with the same number → kept as an RFI asking
+      for a statement of the funding account (a cautious choice: no structural cross-check for this shape).
     TM07: re-verified identity, declared funding, and the payment out matched to its invoice → RETURNING_CUSTOMER."""
     signals: list[Signal] = []
     rfi_multiple = b.policy.get("own_account_rfi_multiple")
@@ -1431,7 +1432,17 @@ def declared_funding(b: CaseBundle) -> Checks:
                 evidence = [doc.doc_id] + ([d.doc_id for d in b.docs.values() if kind_ == "order" and _kind(d, "order")])
                 evidence += [t["transaction_id"], e["transaction_id"]]
                 multiple = m.get("multiple")
-                if code == "OWN_ACCOUNT" and rfi_multiple and multiple is not None and multiple >= rfi_multiple:
+                if code == "INVOICE_MATCHES":
+                    # Kept as an RFI on purpose (Clotilde, 15:30): the order and invoice explain where the money went,
+                    # but nothing documents the account it came from, and this shape has no structural cross-check
+                    # like the 5x split. A wrong close costs 10, a wrong RFI 3.
+                    signals.append(Signal(
+                        alert_id=a["alert_id"], kind="partial", code="RFI_SOURCE_OF_FUNDS",
+                        facts=(f"{facts}; nothing on file shows the client holds the account the funding came from "
+                               f"({t.get('counterparty_account')}): ask for a statement of that account in the client's "
+                               f"name."),
+                        evidence=list(dict.fromkeys(evidence)), strength="hard", source="explainers.declared_funding"))
+                elif code == "OWN_ACCOUNT" and rfi_multiple and multiple is not None and multiple >= rfi_multiple:
                     signals.append(Signal(
                         alert_id=a["alert_id"], kind="partial", code="RFI_UPDATED_PROFILE",
                         facts=(f"{facts}, but the funding is {multiple:g} times the declared volume, at or above the "

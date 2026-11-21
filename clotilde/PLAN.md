@@ -48,7 +48,8 @@ On 326 labels, + `missing_document` and the one-word-greeting fix (right verdict
 e-money **78/78 (100%)**, investment 80/85 (91%), payments and FX 66/80 (73%); 17 labelled cases fixed, none made
 worse. The greeting fix ("Dear Investor", "Dear valued client" are roles, not someone else) also closes 12 refunds
 that had been escalated. + TM10 redundancy: investment **85/85 (100%)**. + greeting fix ("Dear former employee") and
-`declared_funding`: payments and FX **79/80**, 36/36 closable closed (RFI 474 → 242 of 1,000). Wrongful closes 0.
+`declared_funding`: payments and FX **79/80**, 36/36 closable closed (RFI 474 → 242 of 1,000); purchase orders then put
+back to RFI by choice: **75/80**, 32/36 (RFI 274 of 1,000). Wrongful closes 0.
 
 **What's left on the labels:** missing-document RFI twins still escalated (bank 3, e-money 3, investment 3, payments
 and FX 7); TM10 redundancy letter (investment 3); payments and FX shapes resting on the undocumented UK funding account
@@ -79,7 +80,7 @@ development case changed; 5 tests pin it down (they fail on the old code).
 | `group_company` (6) | sister company with the same 100% owner → close; parent holding → close; share below control, different owners, register naming a controller the chart doesn't show → nothing; held payment with its invoice also reported as INVOICE_MATCHES, without the invoice only GROUP_COMPANY |
 | `missing_document` (7) + greetings (1) | own-name round trip → RFI asking for the statement; funded purchase → RFI asking for both documents; money passed on with a cut, or a payment far larger than the money in → nothing; business receipts from several companies → RFI, one company or an individual customer → nothing; stage payments 1…4 → RFI, stages 1, 2, 4 → nothing; a pattern leaving other large money unexplained → nothing; one-word greetings are roles, a full name is someone else |
 | `early_redemption_explained` (5) | redundancy letter from the declared employer + request to sell → close; letter from another employer, units bought with someone else's money, proceeds paid to someone else, no request to sell → nothing |
-| `declared_funding` (6) | declared own-account funding passed to a statement-proven own account → OWN_ACCOUNT, at 5× → RFI_UPDATED_PROFILE; no statement, or a client who didn't declare that channel → nothing; supplier payment backed by a buyer's purchase order → INVOICE_MATCHES, without the order nothing; TM07 re-verified + declared funding + invoiced payment → RETURNING_CUSTOMER, without re-verification nothing |
+| `declared_funding` (6) | declared own-account funding passed to a statement-proven own account → OWN_ACCOUNT, at 5× → RFI_UPDATED_PROFILE; no statement, or a client who didn't declare that channel → nothing; supplier payment backed by a buyer's purchase order → RFI asking for the funding account's statement (never a close), without the order nothing; TM07 re-verified + declared funding + invoiced payment → RETURNING_CUSTOMER, without re-verification nothing |
 | one document, one transaction (5) | one invoice row, or one invoice without a table, can't explain three equal payments (TM03); three rows for three payments still close; one sale receipt can't explain two cash deposits; one payment can't be refunded twice; one gift letter can't explain two gifts |
 | `third_party_documented` (9) | gift letter from the payer to the customer → close, also TM01 at 9×; letter from someone else, to someone else, amount differs, written after the money → nothing; invoice-finance advance with agreement + remittance advice → close; no agreement, advance ≠ rate × total, advice for another client → nothing |
 
@@ -195,3 +196,6 @@ withdrawal in #3 was cleared by a review).
   it, and the TM01 statement shape splits cleanly at the 5× rule (178 below, 32 above) — a split that only makes sense
   if the own-account rule applies. The own-account clause still needs a statement for the account the money goes to.
   Result: payments and FX 66/80 → 79/80 right on the labels, 0 wrongful closes. Still an organisers' question (D20).
+  **Purchase-order shape (32 cases) kept as RFI on purpose (~15:30):** Andrei marked it "Open", the blind Grok labels
+  say RFI, and unlike the 5× split it has no structural cross-check; a wrong close costs 10 against 3 for a wrong RFI.
+  It now asks for a statement of the funding account (RFI_SOURCE_OF_FUNDS). Payments and FX 75/80 on the labels.
