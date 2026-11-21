@@ -135,11 +135,24 @@ def decide(b: CaseBundle, signals: list[Signal], answers: list[dict] | None = No
         f = s.facts.strip()
         if f and f not in sentences:
             sentences.append(f)
-    if len(sentences) < 2 and b.alerts:
+    if len(sentences) < 2 and b.alerts:  # the deciding fact leads; the alert's own message only adds context after it
         msg = _first_sentence(b.alerts[0].get("message", ""))
         if msg and all(msg not in s for s in sentences):
-            sentences.insert(0, msg)
+            sentences.append(msg)
     reason = " ".join(sentences[:4])
+
+    # Evidence: what the deciding signals cite, then every ID the reason names, then the transactions of the deciding alerts.
+    base = len(evidence)
+    for e in re.findall(r"\b[A-Z]{2,4}-[A-Z]{0,2}\d+\b", reason):
+        if e in known and e not in evidence:
+            evidence.append(e)
+    decided = {p["alert_id"] for p in per_alert if p["verdict"] == worst}
+    for a in b.alerts:
+        if a["alert_id"] in decided or ALL_ALERTS in decided:
+            for t in a.get("transaction_ids", [])[:3]:
+                if t in known and t not in evidence:
+                    evidence.append(t)
+    evidence = evidence[: max(10, base)]  # the additions never push out what the deciding signals cite
 
     return Decision(
         case_id=b.case["case_id"],
