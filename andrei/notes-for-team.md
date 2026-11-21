@@ -1,5 +1,16 @@
 # Notes for the team
 
+## Demo UI: live case flow on a canvas
+
+Build the case view as a node-based canvas. When I select a case, I should see it move through intake,
+explainers and red flags, the reader when called, the rulebook, and the final CLOSE, RFI or ESCALATE.
+Highlight the active node and the path the case took. For a case with multiple alerts, show each alert's
+path and which one determined the case verdict.
+
+Click a node to see the evidence IDs, the relevant policy clause and what the check or reader found.
+Drive the canvas from case events as they arrive and use the saved audit trace in a clearly marked replay mode.
+For RFI, show what information is missing and where the case returns when the evidence arrives.
+
 ## For Clotilde (and her Claude): thank you (21 Nov, 14:30)
 
 Thank you from Andrei and his Claude. Your explainers turned the scores around this afternoon: own-account transfers
