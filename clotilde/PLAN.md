@@ -53,7 +53,10 @@ investment 0). Everything else falls back to RFI/ESCALATE, so explainers are whe
 **Seen in the data:** several documents carry the amount only in prose (a letter saying it is "returning £X to you today"), and
 some in tables (takings book), so matching must read `util.amounts(doc.text)` and table rows, not only `doc.fields`.
 
-## Phase 1 — label E-money (~40 cases, target ≤ 45 min)
+## Phase 1 — label E-money ✅ done by Andrei
+53 labels in `eval/labels/emoney.jsonl` and the per-shape work list in `andrei/emoney-findings.md` (it confirms the
+shape map above and adds the exact "close when" conditions). Labels for all four institutions are now in the repo
+(team decision, D9 update). Original checklist, kept for reference:
 - [ ] `python eval/shapes.py emoney` → 30 shapes; label 1–2 per shape, 3–4 for big/mixed ones (`python eval/view.py <id>`).
 - [ ] Write `eval/labels/emoney.jsonl` (`case_id, verdict, reason_code, key_evidence, note`). `note` = what decided it.
 - [ ] Write `clotilde/emoney-findings.md` like `andrei/bank-findings.md`: per shape, "close when (all must hold)", code,
