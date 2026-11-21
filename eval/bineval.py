@@ -56,12 +56,20 @@ QUESTIONS = {
     # red flags (ESCALATE side)
     "r_fraud": {"type": "noul", "instructions": "Does another bank report that money paid into this account came from fraud or a scam?", "criteria": YN},
     "r_threshold": {"type": "noul", "instructions": "Does a note or chat show the customer asking about, or acting to stay under, a reporting, ID-check or invoice threshold?", "criteria": YN},
-    "r_passthrough": {"type": "noul", "instructions": "Did money from unrelated third parties come in and leave again within days, with no documented purpose?", "criteria": YN},
+    "r_passthrough": {"type": "noul", "instructions": "Did money from UNRELATED third parties (not the customer, a lender, an employer, an insurer or a documented business counterparty) come in and leave again within days to linked parties, with no documented purpose?", "criteria": YN},
+    "r_mule": {"type": "noul", "instructions": "Does the account receive other people's money and pass it on for someone else (for example a 'payments job', forwarding to a crypto exchange, or a login device shared with other customers)?", "criteria": YN},
+    "r_early_redemption": {"type": "noul", "instructions": "Were fund units bought with third parties' money and sold back within weeks, with the proceeds paid to other people?", "criteria": YN},
     "r_contradict": {"type": "noul", "instructions": "Does the customer's story (chat or note) contradict the documents, the register or the transactions?", "criteria": YN},
     "r_invoice_mismatch": {"type": "noul", "instructions": "Do invoices on file fail to support the payments (different amounts, dated after the payments, or goods unrelated to the business)?", "criteria": YN},
     "r_corridor": {"type": "noul", "instructions": "Did money move to or from a higher-risk country the customer did not declare, with no document explaining it?", "criteria": YN},
+    "rfi_ask": {"type": "choice", "instructions": "If the case cannot be closed but nothing suggests crime, what single item from the customer would settle it?", "criteria": {
+        "RFI_PURPOSE_DOCUMENTS": "Documents showing what the payments were for (booking, invoice, contract, loan agreement, letter)",
+        "RFI_BUSINESS_RECORDS": "The business records behind the activity (payment file, contractor list, takings)",
+        "RFI_SOURCE_OF_FUNDS": "Proof of where the money came from, or that the customer holds the source account",
+        "RFI_COUNTERPARTY_DETAILS": "Who the counterparty is and what the payment was for",
+        "RFI_UPDATED_PROFILE": "An updated expected income or volume"}},
     # internal list
-    "l_same": {"type": "noul", "instructions": "Does the evidence show the internal-list party is the counterparty, or still controlled it on the payment date (as director or person with significant control)?", "criteria": YN},
+    "l_same": {"type": "noul", "instructions": "Does the evidence show the internal-list party is the counterparty, or still controlled it on the payment date? Check BOTH the director appointment/resignation dates AND the person-with-significant-control 'Ceased' date against the payment date: resigning as director while still a PSC on the payment date means still in control.", "criteria": YN},
     "l_diff": {"type": "noul", "instructions": "Does the evidence show the counterparty is a different person from the internal-list party (different date of birth, unit or identity)?", "criteria": YN},
 }
 sys.path.insert(0, os.path.join(ROOT, "system"))
@@ -82,9 +90,11 @@ def build_questions(policy_text: str, alerts: list[dict]) -> dict:
     plus one question per alert asking whether the evidence explains exactly what that rule measured."""
     pol = parse_policy(policy_text)
     q = json.loads(json.dumps(QUESTIONS))
+    if not any(a["rule_id"] == "TM22" for a in alerts):
+        q.pop("l_same", None), q.pop("l_diff", None)
     add = {
         "own_holds": _clause(policy_text, "own name elsewhere"),
-        "l_same": _clause(policy_text, "internal list", "escalate"),
+        **({"l_same": _clause(policy_text, "internal list", "escalate")} if "l_same" in QUESTIONS else {}),
         "l_diff": _clause(policy_text, "internal list", "different party"),
         "r_corridor": _clause(policy_text, "higher-risk countries"),
         "r_threshold": _clause(policy_text, "cash reporting threshold") + " " + " ".join(
@@ -96,7 +106,7 @@ def build_questions(policy_text: str, alerts: list[dict]) -> dict:
     if inv:
         add["e_amount"] = inv
     for k, clause in add.items():
-        if clause.strip():
+        if clause.strip() and k in q:
             q[k]["instructions"] += f" (SOP: {clause.strip()})"
     for a in alerts:
         rule = pol["rules"].get(a["rule_id"])
@@ -109,8 +119,9 @@ def build_questions(policy_text: str, alerts: list[dict]) -> dict:
 
 BANK_VERSION = "sop-" + hashlib.sha256(json.dumps(QUESTIONS, sort_keys=True).encode()).hexdigest()[:8]
 RED = [("r_fraud", "ESC_MULE_ACTIVITY"), ("r_threshold", "ESC_STRUCTURING"), ("l_same", "ESC_LISTED_PARTY"),
-       ("r_invoice_mismatch", "ESC_INVOICE_MISMATCH"), ("r_contradict", "ESC_UNEXPLAINED_FUNDS"),
-       ("r_passthrough", "ESC_PASS_THROUGH"), ("r_corridor", "ESC_HIGH_RISK_CORRIDOR")]
+       ("r_early_redemption", "ESC_EARLY_REDEMPTION"), ("r_mule", "ESC_MULE_ACTIVITY"),
+       ("r_invoice_mismatch", "ESC_INVOICE_MISMATCH"), ("r_corridor", "ESC_HIGH_RISK_CORRIDOR"),
+       ("r_contradict", "ESC_UNEXPLAINED_FUNDS"), ("r_passthrough", "ESC_PASS_THROUGH")]
 
 
 def ask(cid, inst, state, questions):
@@ -165,25 +176,30 @@ def decide(ans, b):
     for q, code in RED:
         if yes(ans, q):
             return "ESCALATE", code, q
+    has_list = any(a["rule_id"] == "TM22" for a in b.alerts)
     if yes(ans, "l_diff") and all(a["rule_id"] in ("TM22", "TM08", "TM01") for a in b.alerts):
         return "CLOSE", "LIST_MATCH_DIFFERENT_PARTY", "l_diff"
+    if has_list and not yes(ans, "l_diff"):  # SOP: close a list match only when the evidence shows a different party
+        return "RFI", "RFI_COUNTERPARTY_DETAILS", "list unsettled (l_diff not yes)"
     kind, p = choice(ans, "e_kind")
-    documented = kind in CODE_OF and p >= 0.5 and yes(ans, "e_amount") and yes(ans, "e_dated") and yes(ans, "e_all")
+    after_ok = kind in ("business_records", "invoice", "group_company", "collection")  # records may be written after
+    documented = kind in CODE_OF and p >= 0.5 and yes(ans, "e_amount") and (after_ok or yes(ans, "e_dated")) and yes(ans, "e_all")
     if kind in ("own_account", "returning_customer"):
         mult = tm01_multiple(b)
         if not yes(ans, "own_holds"):
             return "RFI", "RFI_SOURCE_OF_FUNDS", "own_holds"
         if mult is not None and mult >= (b.policy.get("own_account_rfi_multiple") or 5):
             return "RFI", "RFI_UPDATED_PROFILE", "5x rule (code)"
-        return ("CLOSE", CODE_OF[kind], "e_kind") if yes(ans, "e_all") else ("RFI", "RFI_SOURCE_OF_FUNDS", "e_all")
+        return "CLOSE", CODE_OF[kind], "e_kind + own_holds"
     if documented and (kind in ("collection", "business_records", "invoice", "group_company") or yes(ans, "e_party")):
         return "CLOSE", CODE_OF[kind], "e_kind"
+    ask_code, ask_p = choice(ans, "rfi_ask")
+    if ask_code and ask_code.startswith("RFI_") and ask_p >= 0.5:
+        return "RFI", ask_code, "rfi_ask"
     if kind in ("invoice", "collection", "group_company"):
         return "RFI", "RFI_PURPOSE_DOCUMENTS", "e_kind (no matching document)"
     if kind == "business_records":
         return "RFI", "RFI_BUSINESS_RECORDS", "e_kind (no matching document)"
-    if any(a["rule_id"] == "TM22" for a in b.alerts):
-        return "RFI", "RFI_COUNTERPARTY_DETAILS", "list unsettled"
     return "RFI", "RFI_SOURCE_OF_FUNDS", "nothing explains it"
 
 
