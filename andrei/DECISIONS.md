@@ -364,6 +364,17 @@ Teammates: keep your own notes in a folder named after you, like this one.
   flags* in the reader; its explanation questions can support code-verified closes. It should not replace the
   rules. Its misses concentrate in payments and FX again.
 
+## D31 — BinEval on the 100 newest team labels: 92% verdict, beats the rules (85%) on the same cases
+- BinEval iteration 2, unchanged, on the 100 Claude-agent labels made after it was built (40 desk + 60 bottom-up):
+  **verdict 92/100, code 80/100, 0 wrongful closes.** CLOSE precision 100% / recall 87%; RFI 75% / 100%;
+  ESCALATE **100% / 95%**. By institution: bank 24/25, e-money 25/25, investment 21/25, payments and FX **22/25**.
+- Our rules-only system on the same 100 cases: 85/100 (payments and FX 16/25).
+- Across every BinEval test since iteration 2 (40 + 146 + 30 consensus + 100 = 316 cases): **0 wrongful closes.**
+- Its 8 verdict misses are all cautious (7 closable cases sent to RFI, 1 escalation sent to RFI): never a wrongful close.
+- Open design question: let BinEval upgrade an RFI to CLOSE when every explanation question is a confident yes and no
+  red-flag question fires? That would relax "a model never closes alone" (D2/D5) on measured evidence; test it on the
+  326 team labels before deciding.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.

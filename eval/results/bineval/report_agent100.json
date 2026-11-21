@@ -1,0 +1,434 @@
+{
+ "version": "sop-f07d7c7e",
+ "totals": {
+  "bin": 92,
+  "bin_code": 80,
+  "holistic": 0,
+  "holistic_code": 0,
+  "n": 100,
+  "bin_wrongful": 0
+ },
+ "misses": [
+  {
+   "case_id": "BK-CS985404",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_UNEXPLAINED_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    0.98
+   ],
+   "yes": [
+    "e_party",
+    "e_dated"
+   ]
+  },
+  {
+   "case_id": "EM-CS252333",
+   "bin": [
+    "CLOSE",
+    "INVOICE_MATCHES",
+    "e_kind"
+   ],
+   "label": [
+    "CLOSE",
+    "DOCUMENTED_EVENT"
+   ],
+   "e_kind": [
+    "invoice",
+    0.58
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM02"
+   ]
+  },
+  {
+   "case_id": "EM-CS986140",
+   "bin": [
+    "RFI",
+    "RFI_COUNTERPARTY_DETAILS",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "EM-CS977580",
+   "bin": [
+    "RFI",
+    "RFI_COUNTERPARTY_DETAILS",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "EM-CS976804",
+   "bin": [
+    "RFI",
+    "RFI_COUNTERPARTY_DETAILS",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "EM-CS972370",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party",
+    "r_passthrough",
+    "r_mule",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "IV-CS133528",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "REFUND_OF_EARLIER_PAYMENT"
+   ],
+   "e_kind": [
+    "refund",
+    0.94
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_all",
+    "own_holds",
+    "alert_TM02"
+   ]
+  },
+  {
+   "case_id": "IV-CS251264",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "DOCUMENTED_EVENT"
+   ],
+   "e_kind": [
+    "one_off_event",
+    0.96
+   ],
+   "yes": [
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM10"
+   ]
+  },
+  {
+   "case_id": "IV-CS675665",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_UNEXPLAINED_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party",
+    "r_passthrough",
+    "r_mule",
+    "r_contradict"
+   ]
+  },
+  {
+   "case_id": "IV-CS978840",
+   "bin": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR",
+    "r_corridor"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_THIRD_PARTY_FUNDING"
+   ],
+   "e_kind": [
+    "none",
+    0.99
+   ],
+   "yes": [
+    "e_party",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "IV-CS994366",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "DOCUMENTED_EVENT"
+   ],
+   "e_kind": [
+    "one_off_event",
+    0.89
+   ],
+   "yes": [
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM10"
+   ]
+  },
+  {
+   "case_id": "IV-CS982181",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "DOCUMENTED_EVENT"
+   ],
+   "e_kind": [
+    "one_off_event",
+    0.94
+   ],
+   "yes": [
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM10"
+   ]
+  },
+  {
+   "case_id": "IV-CS981991",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_UNEXPLAINED_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "r_passthrough",
+    "r_mule",
+    "r_contradict"
+   ]
+  },
+  {
+   "case_id": "PX-CS454181",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS"
+   ],
+   "e_kind": [
+    "none",
+    0.99
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "PX-CS653807",
+   "bin": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS",
+    "e_kind (no matching document)"
+   ],
+   "label": [
+    "CLOSE",
+    "INVOICE_MATCHES"
+   ],
+   "e_kind": [
+    "invoice",
+    0.86
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated"
+   ]
+  },
+  {
+   "case_id": "PX-CS887017",
+   "bin": [
+    "ESCALATE",
+    "ESC_INVOICE_MISMATCH",
+    "r_invoice_mismatch"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR"
+   ],
+   "e_kind": [
+    "invoice",
+    0.94
+   ],
+   "yes": [
+    "e_amount",
+    "r_contradict",
+    "r_invoice_mismatch",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "PX-CS992649",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "own_holds"
+   ],
+   "label": [
+    "CLOSE",
+    "RETURNING_CUSTOMER"
+   ],
+   "e_kind": [
+    "returning_customer",
+    0.61
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated",
+    "e_all",
+    "alert_TM07"
+   ]
+  },
+  {
+   "case_id": "PX-CS992086",
+   "bin": [
+    "ESCALATE",
+    "ESC_INVOICE_MISMATCH",
+    "r_invoice_mismatch"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR"
+   ],
+   "e_kind": [
+    "invoice",
+    0.95
+   ],
+   "yes": [
+    "e_amount",
+    "r_contradict",
+    "r_invoice_mismatch",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "PX-CS986423",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "INVOICE_MATCHES"
+   ],
+   "e_kind": [
+    "invoice",
+    0.77
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated"
+   ]
+  },
+  {
+   "case_id": "PX-CS983382",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS"
+   ],
+   "e_kind": [
+    "none",
+    0.99
+   ],
+   "yes": [
+    "e_party"
+   ]
+  }
+ ]
+}

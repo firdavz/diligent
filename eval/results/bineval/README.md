@@ -8,6 +8,7 @@ Atomic SOP questions answered by pplx-decider (decisions endpoint), combined by 
 | Iteration 2 | same 40 | 40/40 | 37/40 | 0 | `run_iteration2.log` |
 | Iteration 2, validation | 40 untouched | 36/40 | 32/40 | 0 | `run_validation.log`, `report_validation.json` |
 | Iteration 2, the rest | 146 untouched | 131/146 | 112/146 | 0 | `run_rest146.log`, `report_rest146.json` |
+| Iteration 2, newest agent labels | 100 untouched | 92/100 | 80/100 | 0 | `run_agent100.log`, `report_agent100.json` |
 
 `sop-*/<institution>/<case>.json` are the cached answers per question-bank version (probabilities only, no case text):
 copy them to `eval/drafts/bineval/` and `python3 eval/bineval.py` re-runs from cache instantly and identically.
