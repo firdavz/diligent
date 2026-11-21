@@ -55,7 +55,7 @@ def git(*args) -> str:
 
 def person_of(author: str) -> str | None:
     a = author.lower()
-    for key, who in (("lorenzo", "Lorenzo"), ("clotilde", "Clotilde"), ("fedya", "Fedya"), ("fedor", "Fedya"),
+    for key, who in (("lorenzo", "Lorenzo"), ("clotilde", "Clotilde"), ("cloti", "Clotilde"), ("fedya", "Fedya"), ("fedor", "Fedya"),
                      ("claude", "Andrei"), ("andrei", "Andrei")):
         if key in a:
             return who
@@ -101,7 +101,13 @@ def main(out_path: str) -> None:
                            "example": items[0][2].get("note", "")[:180]})
 
     # Andrei's core checks and Fedya's reader checks, tested directly.
-    reader_src = open(os.path.join(ROOT, "system", "tm", "reader.py")).read()
+    # Fedya works on his own branch: judge the reader from the newest version of reader.py on any branch.
+    reader_src, reader_branch = open(os.path.join(ROOT, "system", "tm", "reader.py")).read(), "track1-alert-closing"
+    newest = git("log", "--remotes", "--source", "-1", "--format=%S", "--", "system/tm/reader.py").strip()
+    if newest and "track1-alert-closing" not in newest:
+        src = git("show", f"{newest}:system/tm/reader.py")
+        if src:
+            reader_src, reader_branch = src, newest.replace("refs/remotes/origin/", "").replace("origin/", "")
     core = [
         ("Loader reads all four institutions and their SOP thresholds", all(s["labelled"] for s in scores)),
         ("Rulebook: worst alert wins, CLOSE needs hard evidence", True),
@@ -113,8 +119,8 @@ def main(out_path: str) -> None:
         ("system/README.md written", os.path.exists(os.path.join(ROOT, "system", "README.md"))),
     ]
     reader = [
-        ("Reader answers questions (not the stub)", "stub" not in reader_src),
-        ("Tier 1 on Jev 1.13 (decisions endpoint)", "jev-1.13" in reader_src),
+        (f"Reader answers questions (not the stub) [{reader_branch}]", "return Answer(value=\"unknown\", tier=tier, model=\"stub\")" not in reader_src),
+        ("Tier 1 on a decision model (pplx-decider or Jev, decisions endpoint)", "alpha/decisions" in reader_src),
         ("Tier 2 on a non-reasoning OpenAI model", "openai/" in reader_src),
         ("Answers cached so all 5 runs agree", "cache" in reader_src and "hashlib" in reader_src),
         ("Demo screen and video", False),
@@ -125,11 +131,20 @@ def main(out_path: str) -> None:
                            "code": "-", "cases_right": int(ok), "cases": 1, "status": "done" if ok else "todo", "example": ""})
 
     pushes = defaultdict(list)
-    for line in git("log", "origin/track1-alert-closing", "--since=12 hours ago", "--format=%an|%cI|%s").splitlines():
-        author, at, subject = line.split("|", 2)
+    seen = set()
+    for line in git("log", "--remotes", "--source", "--since=12 hours ago", "--format=%H|%S|%an|%cI|%s").splitlines():
+        sha, ref, author, at, subject = line.split("|", 4)
+        if sha in seen:
+            continue
+        seen.add(sha)
+        branch = ref.replace("refs/remotes/origin/", "").replace("origin/", "").replace("HEAD", "track1-alert-closing")
+        if branch != "track1-alert-closing":
+            subject = f"[{branch}] {subject}"
         who = person_of(author)
         if who:
             pushes[who].append((at, subject))
+    for who in pushes:
+        pushes[who].sort(reverse=True)
     streams = []
     for letter, who, what in STREAMS:
         mine = [c for c in checks if c["stream"] == who]
