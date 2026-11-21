@@ -1307,7 +1307,7 @@ def _deposit_moved_on(b: CaseBundle, txns: list[dict]):
         f"rented homes; ask the customer for the deposit return letter and the holding deposit receipt.")
 
 
-_TWINS = (_own_round_trip, _funded_purchase, _invoiced_receipts, _staged_payments, _unbacked_advance, _deposit_moved_on)
+_TWINS = (_deposit_moved_on, _own_round_trip, _funded_purchase, _invoiced_receipts, _staged_payments, _unbacked_advance)
 
 
 def missing_document(b: CaseBundle) -> Checks:
