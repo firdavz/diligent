@@ -259,6 +259,22 @@ Teammates: keep your own notes in a folder named after you, like this one.
 - First calibration of the full pplx labeller (verdict then code, SOP-worded choice questions, `eval/pplx_label.py`):
   bank verdict agrees 56/58, code 49/58, would-be wrongful closes 0. Others running.
 
+## D24 — pplx-decider as a full labeller: 95% verdict agreement; trust it only at ≥ 0.7
+- `eval/pplx_label.py` (verdict, then reason code, as choice questions worded from POLICY.md and the code table) on all
+  226 human-labelled cases:
+
+  | Institution | Verdict agrees | Code agrees | Would-be wrongful closes |
+  |---|---|---|---|
+  | Bank | 56/58 | 49/58 | 0 |
+  | E-money | 53/53 | 44/53 | 0 |
+  | Investment | 55/60 | 42/60 | 1 (IV-CS791635, p 0.52) |
+  | Payments and FX | 51/55 | 42/55 | 1 (PX-CS123153, p 0.59) |
+  | **All** | **215/226 (95%)** | **177/226 (78%)** | 2, both below 0.7 |
+
+- Rule for model labels: use a model label as a silver label only when its verdict probability is ≥ 0.7; below that it
+  goes to the review desk. Silver labels live in `eval/labels_model/` and are scored separately from the human labels.
+- New cases: 2 per case shape running now (~250), then 3 more per shape (~375). Free tier, cached.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
