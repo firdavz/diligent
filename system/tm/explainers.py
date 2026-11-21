@@ -1272,7 +1272,22 @@ def _unbacked_advance(b: CaseBundle, txns: list[dict]):
         f"remittance advice on file; ask the client for the agreement and the remittance advice for this advance.")
 
 
-_TWINS = (_own_round_trip, _funded_purchase, _invoiced_receipts, _staged_payments, _unbacked_advance)
+def _deposit_moved_on(b: CaseBundle, txns: list[dict]):
+    """A rental deposit returned by one letting agent and paid on as a holding deposit to the next, with no letters on
+    file: the ordinary story of moving home, so ask for the two documents instead of escalating."""
+    back = [t for t in txns if t.get("direction") == "in" and "DEPOSIT RETURN" in (t.get("reference") or "").upper()]
+    held = [t for t in txns if t.get("direction") == "out" and "HOLDING DEPOSIT" in (t.get("reference") or "").upper()]
+    if not back or not held:
+        return None
+    t, o = back[0], held[0]
+    return list(txns), "RFI_PURPOSE_DOCUMENTS", (
+        f"{money(t['amount_gbp'])} came back from {_party(t.get('counterparty_name'))} as a deposit return on "
+        f"{fmt_date(_txn_date(t))} ({t['transaction_id']}) and {money(o['amount_gbp'])} went to "
+        f"{_party(o.get('counterparty_name'))} as a holding deposit ({o['transaction_id']}), which looks like a move between "
+        f"rented homes; ask the customer for the deposit return letter and the holding deposit receipt.")
+
+
+_TWINS = (_own_round_trip, _funded_purchase, _invoiced_receipts, _staged_payments, _unbacked_advance, _deposit_moved_on)
 
 
 def missing_document(b: CaseBundle) -> Checks:
