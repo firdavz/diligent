@@ -23,7 +23,9 @@ from _common import INSTITUTIONS, ROOT
 KEY = os.environ["OPENROUTER_API_KEY"]
 DEC = "https://openrouter.ai/api/alpha/decisions"
 CHAT = "https://openrouter.ai/api/v1/chat/completions"
-MODELS = [("typesafe/jev-1.13", "decisions"), ("perplexity/pplx-decider-v1.3:free", "decisions"), ("openai/gpt-4.1-mini", "chat")]
+ALL_MODELS = [("typesafe/jev-1.13", "decisions"), ("perplexity/pplx-decider-v1.3:free", "decisions"), ("openai/gpt-4.1-mini", "chat")]
+# BAKEOFF_MODELS="jev,pplx" picks a subset by substring (e.g. to skip the paid OpenAI run).
+MODELS = [m for m in ALL_MODELS if not os.environ.get("BAKEOFF_MODELS") or any(k in m[0] for k in os.environ["BAKEOFF_MODELS"].split(","))]
 INSTRUCTION = ("Under this institution's SOP, does the evidence on file explain ALL the activity the alerts raised, so the "
                "case can be CLOSED? Close only when the evidence explains every alert and nothing suggests crime.")
 CRITERIA = {"true": "CLOSE: the evidence on file (documents, the customer's own records, verified facts) explains all the "
@@ -91,7 +93,7 @@ def main(n):
         print(f"{model:40} answered {len(got)}/{len(rows)}  right {right}/{len(got)}  wrongful closes {wrongful}  "
               f"closable closed {closed}/{sum(r['truth'] for r in got)}  identical twice {same}/{len(got)}  cost ${cost:.4f}")
     os.makedirs(os.path.join(ROOT, "eval", "drafts"), exist_ok=True)
-    json.dump(rows, open(os.path.join(ROOT, "eval", "drafts", "bakeoff.json"), "w"), indent=1)
+    json.dump(rows, open(os.path.join(ROOT, "eval", "drafts", os.environ.get("BAKEOFF_OUT", "bakeoff.json")), "w"), indent=1)
 
 
 if __name__ == "__main__":
