@@ -318,7 +318,8 @@ function renderFocused() {
   const c = replay ?? cases.get(selected);
   $("flow-case").textContent = c ? [c.id, c.input?.customer?.name, institution[c.input?.institution]].filter(Boolean).join(" · ") : "Select a case";
   $("replay").hidden = runId !== "sample" || !selected;
-  $("replay").textContent = replay ? "■ Stop replay" : "▶︎ Replay case";
+  $("replay").classList.toggle("is-playing", Boolean(replay));
+  $("replay").textContent = replay ? "Stop replay" : "Replay case";
   $("live-tip").hidden = runId !== "sample";
   const activity = $("events");
   const wasFocused = activity.scrollTop;
