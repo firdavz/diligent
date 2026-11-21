@@ -65,6 +65,8 @@ Key from `OPENROUTER_API_KEY`. Without a key, or on any error, the answer is "un
 
 ## How well it does (development set)
 
-On 226 hand-labelled cases, each label settled against the institution's SOP clause: **0 wrongful closes**, CLOSE
-precision 100%, ESCALATE recall 100%. On 514 further unseen cases labelled by a decision model (95% agreement with our
-hand labels), again **0 wrongful closes**. Detail and history in `andrei/DECISIONS.md`.
+The development set has no answers, so we built our own reference labels: 226 cases labelled by AI agents reasoning
+through each institution's SOP (doubtful ones settled by quoting the deciding clause), cross-checked by a second model
+family that agreed on 95% of verdicts. Against them: **0 wrongful closes**, CLOSE precision 100%, ESCALATE recall 100%.
+On 514 further unseen cases labelled by that second model, again **0 wrongful closes**. These are AI-made references,
+not ground truth. Detail and history in `andrei/DECISIONS.md`.

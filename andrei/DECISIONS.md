@@ -338,6 +338,15 @@ Teammates: keep your own notes in a folder named after you, like this one.
   contradictory sources sent abroad; payments and FX TM03 sub-£10k splits with a staff note about the invoice limit;
   bank TM01+TM02 consulting pass-through. Once they raise their own red flags, TM02/TM03 can move to RFI too (+6 points).
 
+## D29 — Correction: our reference labels are AI-made, not human
+- The development set ships without answers. Our 226 "team labels" (`eval/labels/`) were made by Claude agents
+  reasoning through each POLICY.md, with the 50 doubtful ones settled by quoting the SOP clause; no person labelled cases
+  one by one. Earlier notes and messages called them "human labels"; read that as "team (AI, SOP-reasoned) labels".
+- They are cross-checked by a second model family (pplx-decider agreed on 95% of verdicts, D24) and Lorenzo's blind
+  labeller, but a shared blind spot would inflate our scores. Payments and FX is the likeliest place.
+- The only human labels will come from the review desk's "Label new cases" tab (40 cases); until then, every score we
+  quote is against AI-made references.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
