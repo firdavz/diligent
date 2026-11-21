@@ -420,12 +420,24 @@ def _party(name: str | None) -> str:
     return re.sub(r"\s+client account\s*$", "", name or "", flags=re.I).strip()
 
 
+_ROLE_WORDS = {"sir", "madam", "beneficiary", "tenant", "customer", "client", "policyholder", "colleague", "applicant",
+               "investor", "member", "employee", "holder", "valued", "former", "friend", "team", "partner", "supplier",
+               "student", "patient", "account", "all", "whom", "concern", "parent", "guardian", "owner", "director"}
+
+
+def _looks_like_a_name(greeting: str) -> bool:
+    """'Robin Other' is a person; 'Investor', 'valued client', 'Former Employee' are roles. A name has at least two
+    capitalised words and no role word."""
+    words = re.findall(r"[A-Za-z][\w'-]*", greeting)
+    return (len(words) >= 2 and all(w[0].isupper() for w in words)
+            and not ({w.lower() for w in words} & _ROLE_WORDS) and norm(greeting) not in _GENERIC_ADDRESSEE)
+
+
 def _addressed_elsewhere(b: CaseBundle, doc: Doc) -> bool:
     """The document names someone other than the customer as its addressee or client."""
     customer = b.customer.get("name")
     named = [doc.fields.get(k) for k in ("client", "policyholder", "beneficiary") if doc.fields.get(k)]
-    # A one-word greeting ("Dear Investor") names a role, not a person: people have a first name and a surname.
-    named += [m for m in _GREETING.findall(doc.text) if norm(m) not in _GENERIC_ADDRESSEE and len(norm(m).split()) > 1]
+    named += [m for m in _GREETING.findall(doc.text) if _looks_like_a_name(m)]
     return any(not same_name(n.split(",")[0], customer) for n in named)
 
 

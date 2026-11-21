@@ -876,7 +876,8 @@ class Greetings(unittest.TestCase):
     def test_one_word_greeting_is_a_role_not_another_person(self):
         from tm.explainers import _addressed_elsewhere
         b = own_bundle([], [], [])
-        for greeting in ("Dear Investor,", "Dear valued client,", "Dear Member,"):
+        for greeting in ("Dear Investor,", "Dear valued client,", "Dear Member,", "Dear former employee,",
+                         "Dear Former Employee,", "To whom it may concern,"):
             d = dated_doc("D-1", "letter", f"{greeting}\nWe return £10.00.", "2026-01-01")
             self.assertFalse(_addressed_elsewhere(b, d), greeting)
         other = dated_doc("D-1", "letter", "Dear Robin Other,\nWe return £10.00.", "2026-01-01")
