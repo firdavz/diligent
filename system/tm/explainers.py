@@ -233,6 +233,15 @@ def _own_covers(b: CaseBundle, a: dict, txns: list[dict], own: dict[str, Doc]) -
         floor = (b.policy.get("rules", {}).get("TM02", {}).get("amounts") or [None])[0]
         if not floor:
             return False
+        fires_when = b.policy.get("rules", {}).get("TM02", {}).get("fires_when", "").lower()
+        if "other than the client" in fires_when:
+            # The rule counts only money from third parties: once that is explained, it cannot fire, whatever the
+            # client pays out of its own funds.
+            third = [t for t in rest if t.get("direction") == "in"
+                     and not same_name(t.get("counterparty_name"), b.customer.get("name"))]
+            return sum(t["amount_gbp"] for t in third) < floor
+        # The rule counts all money received: both what is left coming in and what is left going out (card spending
+        # excluded) must be small, so own money in and out to an undocumented party is not explained.
         rest_in = sum(t["amount_gbp"] for t in rest if t.get("direction") == "in")
         rest_out = sum(t["amount_gbp"] for t in rest if t.get("direction") == "out" and t.get("channel") != "card")
         return rest_in < floor and rest_out < floor
@@ -528,8 +537,118 @@ def documented_event(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- REFUND_OF_EARLIER_PAYMENT
+
+def _same_party(t: dict, e: dict) -> bool:
+    if _is_cash_in(t) or _is_cash_in(e):  # cash comes back as cash: withdrawal then deposit
+        return "cash" in (t.get("channel") or "") and "cash" in (e.get("channel") or "")
+    return (same_name(_party(t.get("counterparty_name")), _party(e.get("counterparty_name")))
+            or _same_account(t.get("counterparty_account"), e.get("counterparty_account")))
+
+
+def _twin(b: CaseBundle, t: dict) -> tuple[dict, dict] | None:
+    """(return, original): t and the closest transaction going the other way for the same amount with the same party.
+    t may be the return of an earlier payment, or the original of a later return."""
+    best = None
+    for e in b.txns.values():
+        if (e["transaction_id"] == t["transaction_id"] or e.get("direction") == t.get("direction")
+                or not _same_amount(e["amount_gbp"], t["amount_gbp"]) or not _same_party(t, e)):
+            continue
+        pair = (t, e) if e.get("booked_at", "") < t.get("booked_at", "") else (e, t)
+        gap = abs((_txn_date(pair[0]) or date.min) - (_txn_date(pair[1]) or date.min)).days
+        if best is None or gap < best[0]:
+            best = (gap, pair)
+    return best[1] if best else None
+
+
+def _covering_review(b: CaseBundle, e: dict, t: dict) -> dict | None:
+    """An earlier review written between the original payment and its return (it can describe only the original)."""
+    ed, td = _txn_date(e), _txn_date(t)
+    for r in b.reviews:
+        rd = parse_date(r.get("reviewed_on"))
+        if rd and ed and td and ed <= rd <= td:
+            return r
+    return None
+
+
+def _refund_doc(b: CaseBundle, t: dict, e: dict) -> Doc | None:
+    """A document written between the two payments that confirms the return: it states the amount and names the
+    reference number, the account or the (non-customer) party, and isn't addressed to someone else."""
+    ed, td = _txn_date(e), _txn_date(t)
+    refs = set(re.findall(r"\d{3,}", f"{t.get('reference') or ''} {e.get('reference') or ''}"))
+    accts = [a for a in (t.get("counterparty_account"), e.get("counterparty_account")) if len(_digits(a)) >= 6]
+    party = _party(t.get("counterparty_name") or e.get("counterparty_name"))
+    if same_name(party, b.customer.get("name")):
+        party = ""
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        dd = _doc_date(doc)
+        if not dd or not ed or not td or not ed <= dd <= td:
+            continue
+        if not any(_same_amount(x, t["amount_gbp"]) for x in amounts(doc.text)) or _addressed_elsewhere(b, doc):
+            continue
+        text = f"{doc.title}\n{doc.text}"
+        if (any(r in text for r in refs) or any(a in text for a in accts)
+                or (party and _mentioned(party, text)) or (_is_cash_in(t) and re.search(r"withdr[ae]w", text, re.I))):
+            return doc
+    return None
+
+
+def _describe(t: dict, verb_in: str, verb_out: str) -> str:
+    party = _party(t.get("counterparty_name"))
+    if "cash" in (t.get("channel") or ""):
+        what = "cash deposited" if t.get("direction") == "in" else "cash withdrawn"
+    else:
+        what = f"{verb_in} {party}" if t.get("direction") == "in" else f"{verb_out} {party}"
+    d = _txn_date(t)
+    return f"the {money(t['amount_gbp'])} {what} on {fmt_date(d) if d else '?'} ({t['transaction_id']})"
+
+
+def refund(b: CaseBundle) -> Checks:
+    """Money that is the return of an earlier payment: a transaction going the other way for the same amount with the
+    same party (cash: withdrawal then deposit), confirmed by a document written between the two (venue email, credit
+    note, cancellation confirmation, chat). Cash needs an earlier review written in between that covers the withdrawal.
+    Both legs count as explained; the alert is explained when, without them, it would not have fired."""
+    signals: list[Signal] = []
+    for a in b.alerts:
+        if a.get("rule_id") not in ("TM01", "TM02", "TM05", "TM06", "TM07", "TM08"):
+            continue
+        txns = b.alert_txns(a)
+        explained: dict[str, Doc] = {}
+        pairs = []
+        for x in txns:
+            if x["transaction_id"] in explained:
+                continue
+            pair = _twin(b, x)
+            if not pair:
+                continue
+            t, e = pair  # t returns e
+            doc = _refund_doc(b, t, e)
+            review = _covering_review(b, e, t)
+            if not doc or (_is_cash_in(t) and not (review and re.search(r"withdr", review.get("note", ""), re.I))):
+                continue
+            explained[t["transaction_id"]] = doc
+            explained[e["transaction_id"]] = doc
+            pairs.append((t, e, doc, review))
+        if not pairs or not _own_covers(b, a, txns, explained):
+            continue
+        parts, evidence = [], []
+        for t, e, doc, review in pairs:
+            dd = _doc_date(doc)
+            parts.append(f"{doc.doc_id} ({doc.title}, dated {fmt_date(dd)}) confirms that "
+                         f"{_describe(t, 'received from', 'paid back to')} returns "
+                         f"{_describe(e, 'received from', 'paid to')}"
+                         + (f", which earlier review {review['review_id']} covered" if review else ""))
+            evidence += [doc.doc_id] + ([review["review_id"]] if review else []) + [t["transaction_id"], e["transaction_id"]]
+        signals.append(Signal(
+            alert_id=a["alert_id"], kind="explains", code="REFUND_OF_EARLIER_PAYMENT",
+            facts="; ".join(parts) + ", for the same amount.",
+            evidence=list(dict.fromkeys(evidence)), strength="hard", source="explainers.refund",
+        ))
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Next: refund, invoice_matches (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
+# Next: invoice_matches (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
 # third_party_documented, own account on payments and FX (outgoing own-account transfer; needs a team decision).
 # list_match_different_party is Lorenzo's (red_flags.listed_party).
-CHECKS: list = [business_records, own_account, returning_customer, documented_event]
+CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund]

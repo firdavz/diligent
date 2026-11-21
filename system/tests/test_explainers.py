@@ -389,5 +389,90 @@ class DocumentedEvent(unittest.TestCase):
         self.assertEqual(self.codes(own_bundle([alert], docs[:1], [back, top, out])), [])  # holding deposit undocumented
 
 
+def txn(tid, when, direction, amount, name=None, account=None, ref="", channel="faster_payment", country="United Kingdom"):
+    return {"transaction_id": tid, "booked_at": f"2026-{when}T10:00:00Z", "direction": direction, "channel": channel,
+            "amount_gbp": amount, "counterparty_name": name, "counterparty_account": account, "reference": ref,
+            "counterparty_country": country}
+
+
+class Refund(unittest.TestCase):
+    PAID = txn("T0", "05-10", "out", 7400.55, "Testvale Hotel and Gardens", "account ending 1234", "BOOKING 48151")
+    BACK = txn("T1", "07-20", "in", 7400.55, "Testvale Hotel and Gardens", "12-34-56 78901234", "REFUND BOOKING 48151")
+    TM06 = {"alert_id": "A1", "rule_id": "TM06", "transaction_ids": ["T1"], "measured": {"limit_gbp": 5000}}
+
+    def email(self, text=None, dated="2026-07-18"):
+        text = text or "Dear Client,\nWe have refunded your deposit of £7,400.55 for BOOKING 48151."
+        return dated_doc("EML-1", "venue_email", text, dated, "Email from Testvale Hotel and Gardens")
+
+    def run_refund(self, alerts, docs, txns, reviews=(), policy=None):
+        from tm.explainers import refund
+        b = own_bundle(alerts, docs, txns)
+        b.reviews = list(reviews)
+        if policy:
+            b.policy = policy
+        return refund(b)[0]
+
+    def test_venue_refund_of_an_earlier_deposit_closes(self):
+        review = {"review_id": "R1", "reviewed_on": "2026-05-12", "rule_id": "TM06", "note": "Closed. Venue deposit."}
+        s = self.run_refund([self.TM06], [self.email()], [self.PAID, self.BACK], [review])
+        self.assertEqual([(x.kind, x.code) for x in s], [("explains", "REFUND_OF_EARLIER_PAYMENT")])
+        self.assertEqual(s[0].evidence, ["EML-1", "R1", "T1", "T0"])
+
+    def test_no_document_explains_nothing(self):
+        self.assertEqual(self.run_refund([self.TM06], [], [self.PAID, self.BACK]), [])
+
+    def test_document_written_before_the_original_payment_explains_nothing(self):
+        self.assertEqual(self.run_refund([self.TM06], [self.email(dated="2026-05-01")], [self.PAID, self.BACK]), [])
+
+    def test_no_earlier_payment_of_that_amount_explains_nothing(self):
+        paid = {**self.PAID, "amount_gbp": 7000.00}
+        self.assertEqual(self.run_refund([self.TM06], [self.email()], [paid, self.BACK]), [])
+
+    def test_earlier_payment_to_someone_else_explains_nothing(self):
+        paid = {**self.PAID, "counterparty_name": "Other Venue Ltd", "counterparty_account": "account ending 9999"}
+        self.assertEqual(self.run_refund([self.TM06], [self.email()], [paid, self.BACK]), [])
+
+    def test_document_not_naming_the_booking_or_party_explains_nothing(self):
+        doc_ = dated_doc("EML-1", "customer_email", "We refunded £7,400.55.", "2026-07-18", "Email")
+        self.assertEqual(self.run_refund([self.TM06], [doc_], [self.PAID, self.BACK]), [])
+
+    def test_cancelled_subscription_returned_to_the_same_account_closes_both_alerts(self):
+        sub = txn("T1", "09-13", "in", 27500.0, "Pat Example", "71-01-34 10009843", "ISA SUBSCRIPTION")
+        ret = txn("T2", "09-19", "out", 27500.0, "Pat Example", "71-01-34 10009843", "CANCELLATION REFUND")
+        conf = dated_doc("CAN-1", "cancellation_confirmation",
+                         "Dear Customer,\nWe have returned your subscription of £27,500.00 to 71-01-34 10009843.",
+                         "2026-09-18", "Cancellation confirmation")
+        alerts = [tm01([sub], 28700.0, 6400.0, 4.48),
+                  {"alert_id": "A2", "rule_id": "TM02", "transaction_ids": ["T1", "T2"], "measured": {}}]
+        s = self.run_refund(alerts, [conf], [sub, ret])
+        self.assertEqual(sorted(x.alert_id for x in s), ["A1", "A2"])
+        self.assertEqual(self.run_refund(alerts, [], [sub, ret]), [])  # no confirmation: not explained
+
+    def test_cash_paid_back_in_needs_the_review_that_covered_the_withdrawal(self):
+        out = txn("T0", "07-17", "out", 14000.0, channel="cash_withdrawal")
+        back = txn("T1", "10-06", "in", 14000.0, channel="cash_deposit")
+        chat = dated_doc("CHT-1", "support_chat", "**Customer:** It is the £14,000.00 I withdrew in July.",
+                         "2026-10-06", "Chat with the customer")
+        alert = {"alert_id": "A1", "rule_id": "TM05", "transaction_ids": ["T1"], "measured": {"limit_gbp": 10000}}
+        covers = {"review_id": "R1", "reviewed_on": "2026-07-19", "rule_id": "TM05",
+                  "note": "Closed. Cash withdrawal to buy a car privately."}
+        self.assertEqual(len(self.run_refund([alert], [chat], [out, back], [covers])), 1)
+        self.assertEqual(self.run_refund([alert], [chat], [out, back]), [])  # no review
+        too_early = {**covers, "reviewed_on": "2026-06-01"}  # written before the withdrawal: can't describe it
+        self.assertEqual(self.run_refund([alert], [chat], [out, back], [too_early]), [])
+
+    def test_tm02_third_party_money_rule_follows_the_policy_wording(self):
+        own_payment = txn("T2", "07-21", "out", 116000.0, "Regular Supplier Co", "IBAN ending 4321", "PO 12 BALANCE")
+        alert = {"alert_id": "A1", "rule_id": "TM02", "transaction_ids": ["T1", "T2"], "measured": {}}
+        third_party_only = {**POLICY, "rules": {"TM02": {"amounts": [2000.0], "fires_when":
+                            "at least 80% of the money received from anyone other than the client is paid out"}}}
+        self.assertEqual(len(self.run_refund([alert], [self.email()], [self.PAID, self.BACK, own_payment],
+                                             policy=third_party_only)), 1)
+        all_money = {**POLICY, "rules": {"TM02": {"amounts": [2000.0], "fires_when":
+                     "at least 80% of the money received is paid out within 48 hours"}}}
+        self.assertEqual(self.run_refund([alert], [self.email()], [self.PAID, self.BACK, own_payment],
+                                         policy=all_money), [])
+
+
 if __name__ == "__main__":
     unittest.main()

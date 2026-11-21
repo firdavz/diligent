@@ -9,7 +9,7 @@ payments 22, investment 0). Everything else fell back to RFI/ESCALATE, so explai
 
 ## Status (updated after each check)
 
-`CHECKS = [business_records, own_account, returning_customer, documented_event]` on `track1-alert-closing`
+`CHECKS = [business_records, own_account, returning_customer, documented_event, refund]` on `track1-alert-closing`
 (PR #1 merged; the `clotilde` branch is retired).
 
 | Check → code | Rules | Close when (all hold) | Commit |
@@ -17,30 +17,35 @@ payments 22, investment 0). Everything else fell back to RFI/ESCALATE, so explai
 | `business_records` → `BUSINESS_RECORDS_RECONCILE` | TM03 | every alerted cash deposit has its own row in one record table, same amount to the penny, dated on the deposit day or ≤ 2 days before; a stated day's takings ≥ the top-up | ✅ merged |
 | `own_account` → `OWN_ACCOUNT` / `RFI_UPDATED_PROFILE` | TM01, TM02, TM06, TM08 | a statement names the customer as holder (joint holders count), has the transaction's counterparty account (or its "ending" digits) and the same amount; without that money the alert wouldn't fire; TM01 ≥ `own_account_rfi_multiple` → RFI | ✅ merged |
 | `returning_customer` → `RETURNING_CUSTOMER` | TM07 | "re-verified on <date>" inside the dormant period and on/before the reactivation + the money came from a statement-proven own account; the rest moved < the alert's limit | ✅ pushed |
-| `documented_event` → `DOCUMENTED_EVENT` | TM01, TM02, TM05, TM06, TM07, TM08 | an event letter / receipt / completion statement states the amount to the penny, names the payer, is dated 0–30 days before, carries the reference number, isn't addressed to someone else; cash: the customer is the seller (and owned the vehicle) | this commit |
+| `documented_event` → `DOCUMENTED_EVENT` | TM01, TM02, TM05, TM06, TM07, TM08 | an event letter / receipt / completion statement states the amount to the penny, names the payer, is dated 0–30 days before, carries the reference number, isn't addressed to someone else; cash: the customer is the seller (and owned the vehicle) | ✅ pushed |
+| `refund` → `REFUND_OF_EARLIER_PAYMENT` | TM01, TM02, TM05, TM06, TM07, TM08 | a transaction going the other way for the same amount with the same party (cash: withdrawal then deposit), before or after; a document written between the two states the amount and names the reference, account or party; cash also needs an earlier review written in between that covers the withdrawal | this commit |
+
+**TM02 coverage follows the policy wording:** where TM02 counts only money "from anyone other than the client"
+(payments and FX), explaining the third-party money is enough; elsewhere both what's left coming in and going out must
+stay under the floor (so own money in, then out to an undocumented party, stays unexplained).
 
 Results on the team labels (rules only, after each step; **wrongful closes 0 throughout**):
 
-| | Start | + business_records | + own_account | + returning_customer | + documented_event |
-|---|---|---|---|---|---|
-| Bank (closable closed /29) | 3 | 7 | 9 | 11 | **18** |
-| E-money (/25) | 2 | 4 | 6 | 9 | **18** |
-| Investment (/28) | 0 | 0 | 10 | 13 | **17** |
-| Payments and FX (/24) | 1 | 1 | 1 | 1 | **2** |
+| | Start | + business_records | + own_account | + returning_customer | + documented_event | + refund |
+|---|---|---|---|---|---|---|
+| Bank (closable closed /29) | 3 | 7 | 9 | 11 | 18 | **23** |
+| E-money (/25) | 2 | 4 | 6 | 9 | 18 | **21** |
+| Investment (/28) | 0 | 0 | 10 | 13 | 17 | **20** |
+| Payments and FX (/24) | 1 | 1 | 1 | 1 | 2 | **5** |
 
 Every shape a check touches closes 100% of its cases; every remaining closable miss belongs to a check not yet built.
 
-### Tests — `system/tests/test_explainers.py` (invented data only; 42 tests)
+### Tests — `system/tests/test_explainers.py` (invented data only; 51 tests)
 | Check | What the tests pin down |
 |---|---|
 | `business_records` (11) | all rows match → close; one row missing, one penny off, row dated after or > 2 days before, top-up above the day's takings, two equal deposits with one row → nothing; collection reports emptied the day before cite the cash procedure but not the KYC summary; only TM03; only cash deposits |
 | `own_account` (11) | TM02 in + out both own → close; destination undocumented, holder someone else, account number differs, amount differs, third-party money left over → nothing; TM01 < 5× close, = 5× RFI_UPDATED_PROFILE, still over profile without the own money → nothing; "account ending" + joint holders; TM07 not handled here |
 | `returning_customer` (6) | re-verified the day before + own statement → close (evidence order, "the day before" in the reason); re-verified after the reactivation or before the dormancy, no statement, no re-verification, large payment out left unexplained → nothing |
 | `documented_event` (14) | insurer letter (amount + payer + claim) → close, also TM01 at 8× (5× is own-account only); claim number missing, addressed to someone else, dated after or > 30 days before, other company, amount differs → nothing; invoice / gift letter / venue email / credit note ignored (their own checks); own-name credit ignored; six seller phrasings read as the customer; someone else selling → nothing; vehicle receipt needs the customer's ownership document (registration must match); house move: deposit return + holding deposit both documented → close, one missing → nothing |
+| `refund` (9) | venue refund of an earlier deposit → close (evidence: email, covering review, both legs); no document, document written before the original payment, no earlier payment of that amount, earlier payment to someone else, document naming neither booking nor party → nothing; cancelled subscription returned to the same account closes TM01 and TM02, without confirmation nothing; cash paid back in needs the review that covered the withdrawal (none, or written before the withdrawal → nothing); TM02 third-party-money wording closes, all-money wording with a big payment out doesn't |
 
 ### Next, in order of value
-1. `refund` → `REFUND_OF_EARLIER_PAYMENT`: credit = an earlier outgoing payment to the same party (venue refund, ISA
-   cancellation, credit note) or a re-deposited cash withdrawal; must find the original payment.
+1. ~~`refund`~~ ✅
 2. `invoice_matches` → `INVOICE_MATCHES`: outgoing payment = invoice/contract amount, payee, reference (hospital, dealer +
    loan, supplier invoices, held payments in payments and FX, TM07 pre-pause supplier).
 3. `third_party_documented` → `THIRD_PARTY_DOCUMENTED`: gift letter (giver = payer, recipient = customer), invoice-finance
