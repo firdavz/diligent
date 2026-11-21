@@ -177,10 +177,15 @@ Teammates: keep your own notes in a folder named after you, like this one.
   - "no suspicion yet" → RFI, not ESCALATE;
   - "signs of crime" → ESCALATE;
   - the reason-code table.
-- Still open (6 cases), and the only policy questions for Ahmad:
-  1. "Fits the declared profile" (WITHIN_PROFILE) versus "the evidence explains it": the freelancer studio and the group
-     trip with no document.
-  2. Does a customer's chat count as evidence on file (re-deposited cash)?
+- The last 6 are settled by reasoning through the clauses too (`sop_basis` on each):
+  - group trip with no booking → RFI (CLOSE needs the activity to fit what the institution knows, and a *documented*
+    collection);
+  - freelancer studio with no payment file → RFI_BUSINESS_RECORDS (payees in undeclared countries, so it doesn't fit the
+    profile);
+  - re-deposited cash → CLOSE REFUND_OF_EARLIER_PAYMENT (the bank's own history shows the identical withdrawal, the chat
+    explains its return; ~80% confident, so worth a confirmation from Ahmad but not a blocker).
+- No new SOPs at test time: the unseen cases come "under the same policies" with the same files, and the system reads
+  each folder's POLICY.md at run time anyway.
 - Rules and code follow the same order: SOP clause → code. The audit trail quotes the clause (D15).
 
 ## Open questions
