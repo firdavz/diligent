@@ -655,6 +655,76 @@ class ThirdPartyDocumented(unittest.TestCase):
         self.assertEqual(self.codes([self.TM08], [self.AGREEMENT, self.advice(client="Other Client Ltd")], [self.ADV]), [])
 
 
+class CollectionDocumented(unittest.TestCase):
+    PAYERS = ["Jules Sample", "Remy Sample", "Kai Sample", "Emery Sample"]
+
+    def txns(self, price=320.0, out_amount=1600.0, out_account="43-85-10 24481391", payers=None):
+        ins = [txn(f"T{i}", f"09-0{i + 1}", "in", price, n, f"11-11-1{i} 1111111{i}", f"TRIP {n.split()[0].upper()}")
+               for i, n in enumerate(payers or self.PAYERS)]
+        out = txn("T9", "09-07", "out", out_amount, "Testgate Travel Ltd", out_account, "BOOKING GT50985")
+        return ins, out
+
+    def booking(self, names=None, price="£320.00", total="£1,600.00"):
+        names = names or ["Pat Example"] + self.PAYERS
+        listed = "\n".join(f"{i}. {n}" for i, n in enumerate(names, 1))
+        return dated_doc("BKG-1", "booking_confirmation",
+                         f"**Booking reference:** GT50985\n**Lead traveller:** Pat Example\n"
+                         f"**Price:** {price} per person, {total} in total\n"
+                         f"**Payment:** by bank transfer to Testgate Travel Ltd, account 43-85-10 24481391, reference GT50985\n"
+                         f"Travellers:\n{listed}", "2026-08-26", "Booking confirmation GT50985 from Testgate Travel Ltd")
+
+    def alerts(self, ins, out):
+        return [{"alert_id": "A1", "rule_id": "TM02", "transaction_ids": [t["transaction_id"] for t in ins + [out]],
+                 "measured": {}},
+                {"alert_id": "A2", "rule_id": "TM04", "transaction_ids": [t["transaction_id"] for t in ins],
+                 "measured": {"limit": 3}}]
+
+    def codes(self, docs, ins, out):
+        from tm.explainers import collection_documented
+        return sorted((s.alert_id, s.kind, s.code)
+                      for s in collection_documented(own_bundle(self.alerts(ins, out), docs, ins + [out]))[0])
+
+    def test_booking_confirmation_listing_every_payer_closes_both_alerts(self):
+        ins, out = self.txns()
+        self.assertEqual(self.codes([self.booking()], ins, out),
+                         [("A1", "explains", "COLLECTION_DOCUMENTED"), ("A2", "explains", "COLLECTION_DOCUMENTED")])
+
+    def test_payer_paying_another_amount_is_not_explained(self):
+        ins, out = self.txns()
+        ins[0]["amount_gbp"] = 400.0
+        self.assertNotIn(("A1", "explains", "COLLECTION_DOCUMENTED"), self.codes([self.booking()], ins, out))
+
+    def test_payment_to_another_account_is_not_explained(self):
+        ins, out = self.txns(out_account="99-99-99 99999999")
+        self.assertNotIn(("A1", "explains", "COLLECTION_DOCUMENTED"), self.codes([self.booking()], ins, out))
+
+    def test_customer_not_on_the_list_explains_nothing(self):
+        ins, out = self.txns()
+        doc_ = self.booking(names=["Someone Else"] + self.PAYERS)
+        self.assertFalse([c for c in self.codes([doc_], ins, out) if c[1] == "explains"])
+
+    def test_travellers_times_price_must_make_the_total(self):
+        ins, out = self.txns()
+        self.assertFalse([c for c in self.codes([self.booking(total="£2,000.00")], ins, out) if c[1] == "explains"])
+
+    def test_same_pattern_without_confirmation_asks_for_it(self):
+        ins, out = self.txns()
+        self.assertEqual(self.codes([], ins, out),
+                         [("A1", "partial", "RFI_PURPOSE_DOCUMENTS"), ("A2", "partial", "RFI_PURPOSE_DOCUMENTS")])
+
+    def test_no_pattern_when_the_payment_is_not_a_multiple_of_the_shares(self):
+        ins, out = self.txns(out_amount=1750.0)
+        self.assertEqual(self.codes([], ins, out), [])
+
+    def test_confirmation_the_payments_dont_follow_is_left_to_the_fallback(self):
+        ins, out = self.txns(out_account="99-99-99 99999999")  # paid somewhere the confirmation doesn't say
+        self.assertEqual(self.codes([self.booking()], ins, out), [])  # no close, and no softening to RFI either
+
+    def test_no_pattern_with_fewer_than_three_payers(self):
+        ins, out = self.txns(out_amount=960.0, payers=self.PAYERS[:2])
+        self.assertEqual(self.codes([], ins, out), [])
+
+
 class OneDocumentOneTransaction(unittest.TestCase):
     """The rule behind Fedya's report, in every check that reads a document per transaction."""
 

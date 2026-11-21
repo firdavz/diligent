@@ -894,9 +894,149 @@ def third_party_documented(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- COLLECTION_DOCUMENTED
+
+_PER_PERSON = re.compile(r"£\s?([\d,]+(?:\.\d+)?)\s*per\s+(?:person|head|traveller|participant)", re.I)
+_LISTED = re.compile(r"^\s*\d{1,3}[.)]\s+(.+?)\s*$", re.M)
+_COMPANY_WORDS = {"ltd", "limited", "plc", "llp", "llc", "inc", "co", "company", "srl", "sas", "gmbh", "bv"}
+COLLECTION_MIN_PAYERS = 3
+
+
+def _is_company(name: str | None) -> bool:
+    return bool(set(norm(name).split()) & _COMPANY_WORDS)
+
+
+def _collection_terms(doc: Doc) -> dict | None:
+    """From a booking confirmation: price per person, total, the people listed, and the payment account/reference."""
+    m = _PER_PERSON.search(doc.text)
+    names = _LISTED.findall(doc.text)
+    if not m or not names:
+        return None
+    price = float(m[1].replace(",", ""))
+    total = next((x for x in amounts(doc.text) if not _same_amount(x, price) and x > price), None)
+    if total is None or not _same_amount(price * len(names), total):
+        return None  # the listed travellers at the stated price must make the stated total
+    pay = doc.fields.get("payment") or doc.text
+    ref = doc.fields.get("booking reference") or ""
+    return {"price": price, "total": total, "names": names, "pay": pay, "ref": ref}
+
+
+def _pays_as_instructed(t: dict, doc: Doc, terms: dict) -> bool:
+    """The stated total, to the company named in the confirmation, to its stated account, with its reference."""
+    return (t.get("direction") == "out" and _same_amount(t["amount_gbp"], terms["total"])
+            and _mentioned(_party(t.get("counterparty_name")), f"{doc.title}\n{terms['pay']}")
+            and (not t.get("counterparty_account") or t["counterparty_account"] in terms["pay"]
+                 or _same_account(t["counterparty_account"], terms["pay"]))
+            and (not terms["ref"] or terms["ref"] in (t.get("reference") or "")))
+
+
+def _collection_for(b: CaseBundle, txns: list[dict]) -> tuple[Doc, dict[str, Doc]] | None:
+    """A booking confirmation that lists the customer and the payers, at the per-person price, and whose total was paid
+    as instructed (looked for among all the customer's transactions: a TM04 alert holds only the money in). A listed
+    traveller paying another amount contradicts it. Returns the document and the alert transactions it explains."""
+    customer = b.customer.get("name")
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        if not _kind(doc, "booking"):
+            continue
+        terms = _collection_terms(doc)
+        if not terms or not any(same_name(n, customer) for n in terms["names"]):
+            continue
+        paid = [t for t in b.txns.values() if _pays_as_instructed(t, doc, terms)]
+        if not paid:
+            continue  # the money didn't go where the confirmation says
+        explained: dict[str, Doc] = {t["transaction_id"]: doc for t in paid if t["transaction_id"] in
+                                     {x["transaction_id"] for x in txns}}
+        contradicted = False
+        for t in txns:
+            payer = t.get("counterparty_name")
+            if t.get("direction") != "in" or not any(same_name(n, payer) for n in terms["names"]) \
+                    or same_name(payer, customer):
+                continue
+            if _same_amount(t["amount_gbp"], terms["price"]):
+                explained[t["transaction_id"]] = doc
+            else:
+                contradicted = True  # a listed traveller paid something other than the stated price
+        if explained and not contradicted:
+            return doc, explained
+    return None
+
+
+def _collection_pattern(b: CaseBundle, txns: list[dict]) -> tuple[list[dict], dict, int] | None:
+    """Without a confirmation: at least COLLECTION_MIN_PAYERS different people each pay the same amount, then one
+    payment of that amount times the number of payers (or one more, the customer's own share) goes to a company with a
+    numbered reference. Returns (payers' transactions, the payment out, shares)."""
+    customer = b.customer.get("name")
+    by_amount: dict[float, list[dict]] = {}
+    for t in txns:
+        if t.get("direction") == "in" and t.get("counterparty_name") and not same_name(t["counterparty_name"], customer) \
+                and not _is_company(t["counterparty_name"]):
+            by_amount.setdefault(round(t["amount_gbp"], 2), []).append(t)
+    for price, ins in sorted(by_amount.items(), key=lambda kv: -len(kv[1])):
+        people = {name_key(t["counterparty_name"]) for t in ins}
+        if len(people) < COLLECTION_MIN_PAYERS:
+            continue
+        last_in = max(t.get("booked_at", "") for t in ins)
+        for out in b.txns.values():
+            if (out.get("direction") != "out" or not _is_company(out.get("counterparty_name"))
+                    or not re.search(r"\d{3,}", out.get("reference") or "") or out.get("booked_at", "") < last_in):
+                continue
+            for shares in (len(ins) + 1, len(ins)):
+                if _same_amount(out["amount_gbp"], price * shares):
+                    return ins, out, shares
+    return None
+
+
+def collection_documented(b: CaseBundle) -> Checks:
+    """A documented collection made on behalf of named people: a booking confirmation lists the customer and every
+    payer, each paid the per-person price, and the total went to the stated account with the booking reference.
+    The same pattern with no confirmation on file is not suspicious but needs that one document: RFI."""
+    signals: list[Signal] = []
+    for a in b.alerts:
+        if a.get("rule_id") not in ("TM02", "TM04"):
+            continue
+        txns = b.alert_txns(a)
+        hit = _collection_for(b, txns)
+        if hit:
+            doc, explained = hit
+            if _own_covers(b, a, txns, explained):
+                ins = [t for t in txns if t["transaction_id"] in explained and t.get("direction") == "in"]
+                terms = _collection_terms(doc)
+                outs = [t for t in sorted(b.txns.values(), key=lambda t: t["transaction_id"])
+                        if _pays_as_instructed(t, doc, terms)][:1]
+                facts = (f"{doc.doc_id} ({doc.title}) lists {len(terms['names'])} travellers including "
+                         f"{b.customer.get('name')} at {money(terms['price'])} each; the {len(ins)} payers in the alert "
+                         f"are all on it and each paid {money(terms['price'])}"
+                         + (f", and the {money(outs[0]['amount_gbp'])} paid to {_party(outs[0].get('counterparty_name'))}"
+                            f" on {fmt_date(_txn_date(outs[0]))} ({outs[0]['transaction_id']}) is the stated total"
+                            if outs else "") + ".")
+                signals.append(Signal(
+                    alert_id=a["alert_id"], kind="explains", code="COLLECTION_DOCUMENTED", facts=facts,
+                    evidence=list(dict.fromkeys([doc.doc_id] + [t["transaction_id"] for t in outs + ins])),
+                    strength="hard", source="explainers.collection_documented",
+                ))
+                continue
+        # The RFI twin only when no booking confirmation is on file at all: a confirmation the payments don't follow
+        # is not a missing document, and is left to the fallback.
+        pattern = None if any(_kind(d, "booking") for d in b.docs.values()) else _collection_pattern(b, txns)
+        if pattern:
+            ins, out, shares = pattern
+            price = ins[0]["amount_gbp"]
+            signals.append(Signal(
+                alert_id=a["alert_id"], kind="partial", code="RFI_PURPOSE_DOCUMENTS",
+                facts=(f"{len(ins)} people each paid {money(price)} and {money(out['amount_gbp'])} ({shares} shares) went "
+                       f"to {_party(out.get('counterparty_name'))} on {fmt_date(_txn_date(out))} with reference "
+                       f"{out.get('reference')} ({out['transaction_id']}), which looks like a group collection, but no "
+                       f"booking confirmation is on file; ask the customer for the booking confirmation listing the "
+                       f"travellers and the price per person."),
+                evidence=list(dict.fromkeys([out["transaction_id"]] + [t["transaction_id"] for t in ins][:5])),
+                strength="hard", source="explainers.collection_documented",
+            ))
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Next: collection_documented, group_company (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
+# Next: group_company (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
 # third_party_documented, own account on payments and FX (outgoing own-account transfer; needs a team decision).
 # list_match_different_party is Lorenzo's (red_flags.listed_party).
 CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches,
-                third_party_documented]
+                third_party_documented, collection_documented]
