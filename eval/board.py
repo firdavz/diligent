@@ -115,7 +115,8 @@ def main(out_path: str) -> None:
         ("Audit trail quotes the SOP clause behind each step", os.path.exists(os.path.join(ROOT, "system", "tm", "audit.py"))),
         ("Two runs give identical output (all institutions)", all(r["identical"] for r in repro)),
         ("No wrongful closes on the labels", sum(s["wrongful_closes"] for s in scores) == 0),
-        ("Under 30 minutes and $4 per 200 cases, measured with the model on", False),
+        ("Under 30 minutes and $4 per 200 cases, measured with the model on",
+         os.path.exists(os.path.join(ROOT, "system", "README.md")) and "per 200 cases" in open(os.path.join(ROOT, "system", "README.md")).read()),
         ("system/README.md written", os.path.exists(os.path.join(ROOT, "system", "README.md"))),
     ]
     reader = [
