@@ -293,6 +293,17 @@ Teammates: keep your own notes in a folder named after you, like this one.
   on the 214 with confidence ≥ 0.7: right 166/214, **no possible wrongful closes**, cost saved bank 82%, e-money 80%,
   investment 76%, **payments and FX 32%**. Payments and FX is the gap again.
 
+## D26 — BinEval validation on 40 untouched labelled cases: ties the holistic labeller, still 0 wrongful closes
+- Iteration 2 on 40 labelled cases NOT used for tuning: **verdict 36/40, code 32/40, wrongful closes 0**. The holistic
+  labeller on the same cases: 36/40, 33/40. So the 40/40 in D25 was partly fitted to the tuning set; the honest number is
+  ~90% verdict, with no wrongful closes on either set.
+- What BinEval adds is not accuracy but **traceability**: every miss names the question behind it. Validation misses:
+  `r_mule` fires before `r_corridor` (two corridor cases coded as mule); a redundancy letter explains a TM10 sale without
+  an amount match (`e_amount` too strict for one-off events); a payments and FX refund where `e_all` stayed no; one missed
+  red flag (RFI where the label escalates); PX-CS123336 (the open own-account question); two RFI codes.
+- Not tuned further on this set: tuning on the validation cases would make them a training set too. Any further fix
+  needs a fresh held-out set (the 40 human-labelled desk cases are reserved for that).
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
