@@ -19,17 +19,20 @@ from __future__ import annotations
 import re
 from datetime import date
 
+from .live import CheckObserver
 from .types import CaseBundle, Doc, Question, Signal
 from .util import amounts, fmt_date, money, name_key, norm, parse_date, same_name
 
 Checks = tuple[list[Signal], list[Question]]
 
 
-def explainers(b: CaseBundle) -> Checks:
+def explainers(b: CaseBundle, on_check: CheckObserver | None = None) -> Checks:
     signals: list[Signal] = []
     questions: list[Question] = []
     for check in CHECKS:
         s, q = check(b)
+        if on_check:
+            on_check(check.__name__, s, q)
         signals += s
         questions += q
     return signals, questions

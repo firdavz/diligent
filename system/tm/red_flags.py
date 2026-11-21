@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
+from .live import CheckObserver
 from .types import ALL_ALERTS, CaseBundle, Doc, Question, Signal
 from .util import amounts, fmt_date, money, name_key, norm, parse_date, parse_dt, same_name
 
@@ -591,11 +592,13 @@ def corridor_to_individuals(b: CaseBundle) -> Checks:
 
 # --------------------------------------------------------------------------- orchestration
 
-def red_flags(b: CaseBundle) -> Checks:
+def red_flags(b: CaseBundle, on_check: CheckObserver | None = None) -> Checks:
     signals: list[Signal] = []
     questions: list[Question] = []
     for check in CHECKS:
         s, q = check(b)
+        if on_check:
+            on_check(check.__name__, s, q)
         signals += s
         questions += q
     return signals, questions

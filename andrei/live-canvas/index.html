@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101019">
+  <title>Case Flow · Payper Trail</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="/" aria-label="Payper Trail Case Flow">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>Payper Trail</span>
+    </a>
+    <span class="mast-divider"></span>
+    <span class="mast-label">Transaction monitoring</span>
+    <span id="connection" class="connection"><i></i>Connecting</span>
+  </header>
+
+  <main class="shell">
+    <div class="intro">
+      <div><p class="eyebrow"><span></span> Review workspace</p><h1>Case Flow</h1><p class="tagline">Follow each alert from raw evidence to a policy-backed decision.</p></div>
+      <label class="run-select">Run<select id="run-picker"><option value="sample">Sample replay</option></select></label>
+    </div>
+    <section class="metrics" id="metrics" aria-label="Run totals"></section>
+
+    <div class="workspace">
+      <aside class="cases" aria-label="Cases">
+        <div class="panel-title"><h2>Cases</h2><span id="case-count" class="count"></span></div>
+        <label class="search"><span aria-hidden="true">⌕</span><input id="case-search" type="search" placeholder="Find a case" aria-label="Find a case"></label>
+        <div class="case-filters" role="group" aria-label="Filter by verdict">
+          <button type="button" data-filter="" aria-pressed="true">All</button>
+          <button type="button" data-filter="CLOSE" aria-pressed="false">Close</button>
+          <button type="button" data-filter="RFI" aria-pressed="false">RFI</button>
+          <button type="button" data-filter="ESCALATE" aria-pressed="false">Escalate</button>
+        </div>
+        <div id="case-list" class="case-list"></div>
+      </aside>
+
+      <section class="flow" aria-label="Case decision canvas">
+        <div class="flow-head">
+          <div><h2>Decision canvas</h2><p id="flow-case">Select a case</p></div>
+          <div class="flow-actions">
+            <button type="button" id="replay" class="primary" hidden>▶ Replay case</button>
+            <button type="button" id="live-tip" class="secondary" hidden aria-expanded="false" aria-controls="start-tip">Live setup</button>
+          </div>
+        </div>
+        <div id="start-tip" class="start-tip" hidden>
+          <p>Run the triage engine with live events enabled, then select the new run.</p>
+          <code>TM_LIVE=1 system/run &lt;institution-folder&gt; &lt;output.jsonl&gt;</code>
+        </div>
+        <div class="viewport" id="viewport" tabindex="0" aria-label="Pannable decision graph">
+          <div class="board-wrap" id="board-wrap">
+            <div class="board" id="board">
+              <svg class="wires" viewBox="0 0 908 482" role="presentation">
+                <path data-from="intake" data-to="red_flags" d="M207 240H227Q242 240 242 225V161Q242 146 257 146H266"/>
+                <path data-from="intake" data-to="explainers" d="M207 240H227Q242 240 242 255V333Q242 348 257 348H266"/>
+                <path data-from="red_flags" data-to="reader" data-reader="true" d="M427 146H466"/>
+                <path data-from="explainers" data-to="reader" data-reader="true" d="M347 299V264Q347 249 362 249H532Q547 249 547 234V195"/>
+                <path data-from="red_flags" data-to="rulebook" d="M427 146H439Q454 146 454 161V286Q454 301 469 301H540Q555 301 555 316V332"/>
+                <path data-from="explainers" data-to="rulebook" d="M427 348H466"/>
+                <path data-from="reader" data-to="rulebook" data-reader="true" d="M628 146H656Q671 146 671 161V333Q671 348 656 348H628"/>
+                <path data-from="rulebook" data-to="validate" d="M628 348H700"/>
+                <path data-from="validate" data-to="verdict" d="M781 299V197"/>
+              </svg>
+              <span class="graph-label inputs-label">Inputs</span>
+              <span class="graph-label checks-label">Evidence checks</span>
+              <span class="graph-label decision-label">Assessment</span>
+              <span class="graph-label output-label">Output</span>
+            </div>
+          </div>
+          <div class="canvas-legend" aria-hidden="true"><span><i></i> Traversed</span><span><i></i> Skipped</span></div>
+          <div class="zoom" aria-label="Zoom controls">
+            <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+            <button type="button" id="zoom-fit" aria-label="Fit graph">Fit</button>
+            <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+        <section class="timeline" aria-label="Case activity">
+          <div class="panel-title"><h2>Case activity</h2><span id="activity-note" class="muted">Event stream</span></div>
+          <ol id="events"></ol>
+        </section>
+      </section>
+
+      <aside class="inspect" aria-label="Node inspector">
+        <div class="panel-title"><h2>Inspector</h2><span class="muted">Node details</span></div>
+        <div id="inspector" class="inspector"></div>
+      </aside>
+    </div>
+    <footer class="footer"><span>One verdict per case · the highest-severity alert wins</span><span id="run-foot">Payper Trail · Track 1</span></footer>
+  </main>
+</body>
+</html>

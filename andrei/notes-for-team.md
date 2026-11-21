@@ -11,6 +11,8 @@ Click a node to see the evidence IDs, the relevant policy clause and what the ch
 Drive the canvas from case events as they arrive and use the saved audit trace in a clearly marked replay mode.
 For RFI, show what information is missing and where the case returns when the evidence arrives.
 
+The runnable judge preview and live command are in [live-canvas/README.md](live-canvas/README.md).
+
 ## For Clotilde (and her Claude): thank you (21 Nov, 14:30)
 
 Thank you from Andrei and his Claude. Your explainers turned the scores around this afternoon: own-account transfers

@@ -45,6 +45,11 @@ The reason is built from the deciding signals' facts — this case's names, amou
 
 Key from `OPENROUTER_API_KEY`. Without a key, or on any error, the answer is "unknown" and the rules still decide.
 
+## Live judge demo
+
+Start the [Payper Trail case canvas](../andrei/live-canvas/README.md), then set `TM_LIVE=1` on the normal run command. The canvas
+shows each case's checks, reader answers, and verdict as they happen.
+
 ## Reproducibility
 
 - Rules are deterministic; model calls use temperature 0, a fixed seed, inputs in a fixed order, and every answer is
