@@ -785,6 +785,69 @@ class GroupCompany(unittest.TestCase):
         self.assertEqual([x.code for x in group_company(b)[0]], ["GROUP_COMPANY"])
 
 
+class MissingDocument(unittest.TestCase):
+    TM02 = {"alert_id": "A1", "rule_id": "TM02", "measured": {}}
+
+    def run_twins(self, alert, txns, customer=None):
+        from tm.explainers import missing_document
+        alert = {**alert, "transaction_ids": alert.get("transaction_ids") or [t["transaction_id"] for t in txns]}
+        return [(s.kind, s.code) for s in missing_document(own_bundle([alert], [], txns, customer=customer))[0]]
+
+    def test_own_name_round_trip_without_a_statement_asks_for_it(self):
+        txns = [txn("T1", "08-10", "in", 23000.0, "Pat Example", "44-37-95 29527273", "ISA SUBSCRIPTION"),
+                txn("T2", "08-16", "out", 23000.0, "Pat Example", "44-37-95 29527273", "CANCELLATION REFUND")]
+        self.assertEqual(self.run_twins(self.TM02, txns), [("partial", "RFI_SOURCE_OF_FUNDS")])
+
+    def test_funded_purchase_without_documents_asks_for_both(self):
+        txns = [txn("T1", "10-08", "in", 19950.0, "Testley Finance Ltd", "55-63-66 37900195", "LOAN ADVANCE"),
+                txn("T2", "10-09", "out", 21450.0, "Testley Motors Ltd", "27-97-97 37686307", "INV 40479")]
+        self.assertEqual(self.run_twins(self.TM02, txns), [("partial", "RFI_PURPOSE_DOCUMENTS")])
+
+    def test_money_passed_on_with_a_cut_is_not_a_funded_purchase(self):
+        txns = [txn("T1", "10-08", "in", 19950.0, "Testley Finance Ltd", "55-63-66 37900195", "CONSULTING"),
+                txn("T2", "10-09", "out", 18000.0, "New Linked Ltd", "27-97-97 37686307", "SERVICES")]
+        self.assertEqual(self.run_twins(self.TM02, txns), [])
+
+    def test_payment_far_larger_than_the_money_in_is_not_a_funded_purchase(self):
+        txns = [txn("T1", "10-08", "in", 10000.0, "Testley Finance Ltd", "55-63-66 37900195", "LOAN ADVANCE"),
+                txn("T2", "10-09", "out", 16000.0, "Testley Motors Ltd", "27-97-97 37686307", "INV 40479")]
+        self.assertEqual(self.run_twins(self.TM02, txns), [])
+
+    def test_business_receipts_from_several_companies_ask_for_the_invoices(self):
+        business = {"name": "Testford Freight Ltd", "kind": "business"}
+        txns = [txn("T1", "09-16", "in", 13226.92, "Testwick Exports Ltd", "15-95-26 35555084", "FREIGHT 89616"),
+                txn("T2", "09-17", "in", 12427.00, "Testhurst Brands Ltd", "36-49-59 39073552", "FREIGHT 68805")]
+        alert = {"alert_id": "A1", "rule_id": "TM08", "measured": {"limit_gbp": 1000}}
+        self.assertEqual(self.run_twins(alert, txns, business), [("partial", "RFI_PURPOSE_DOCUMENTS")])
+        self.assertEqual(self.run_twins(alert, txns[:1], business), [])  # one company only
+        self.assertEqual(self.run_twins(alert, txns), [])  # an individual customer
+
+    def test_stage_payments_numbered_one_to_n_ask_for_the_schedule(self):
+        stages = [txn(f"T{i}", f"08-{i:02d}", "out", 9500.0 + i, "Testford Arredamenti Srl", "IBAN ending 6037",
+                      f"PROJECT STAGE {i}", channel="swift") for i in range(1, 5)]
+        alert = {"alert_id": "A1", "rule_id": "TM03", "measured": {"limit_count": 2}}
+        self.assertEqual(self.run_twins(alert, stages), [("partial", "RFI_PURPOSE_DOCUMENTS")])
+        gap = [stages[0], stages[1], stages[3]]  # stages 1, 2, 4: not a schedule
+        self.assertEqual(self.run_twins(alert, gap), [])
+
+    def test_pattern_that_leaves_other_large_money_unexplained_stays_silent(self):
+        txns = [txn("T1", "10-08", "in", 19950.0, "Testley Finance Ltd", "55-63-66 37900195", "LOAN ADVANCE"),
+                txn("T2", "10-09", "out", 21450.0, "Testley Motors Ltd", "27-97-97 37686307", "INV 40479"),
+                txn("T3", "10-09", "in", 9000.0, "Unknown Person", "11-11-11 11111111", "THANKS")]
+        self.assertEqual(self.run_twins(self.TM02, txns), [])
+
+
+class Greetings(unittest.TestCase):
+    def test_one_word_greeting_is_a_role_not_another_person(self):
+        from tm.explainers import _addressed_elsewhere
+        b = own_bundle([], [], [])
+        for greeting in ("Dear Investor,", "Dear valued client,", "Dear Member,"):
+            d = dated_doc("D-1", "letter", f"{greeting}\nWe return £10.00.", "2026-01-01")
+            self.assertFalse(_addressed_elsewhere(b, d), greeting)
+        other = dated_doc("D-1", "letter", "Dear Robin Other,\nWe return £10.00.", "2026-01-01")
+        self.assertTrue(_addressed_elsewhere(b, other))
+
+
 class OneDocumentOneTransaction(unittest.TestCase):
     """The rule behind Fedya's report, in every check that reads a document per transaction."""
 

@@ -398,7 +398,8 @@ def _is_event_doc(doc: Doc) -> bool:
     return any(k in kind for k in _EVENT_DOC_KINDS) and not any(k in kind for k in _NOT_EVENT_DOC_KINDS)
 _GREETING = re.compile(r"^Dear\s+(.+?),?\s*$", re.M)
 _GENERIC_ADDRESSEE = {"sir", "madam", "sir madam", "beneficiary", "tenant", "customer", "client", "policyholder",
-                      "sir or madam", "colleague", "applicant"}
+                      "sir or madam", "colleague", "applicant", "investor", "valued customer", "valued client",
+                      "account holder", "member"}
 _REGISTRATION = re.compile(r"\b([A-Z]{2}\d{2}\s?[A-Z]{3})\b")
 _NAME = r"([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)+)"
 _SELLER_PATTERNS = (  # ways a receipt names its seller, most explicit first
@@ -423,7 +424,8 @@ def _addressed_elsewhere(b: CaseBundle, doc: Doc) -> bool:
     """The document names someone other than the customer as its addressee or client."""
     customer = b.customer.get("name")
     named = [doc.fields.get(k) for k in ("client", "policyholder", "beneficiary") if doc.fields.get(k)]
-    named += [m for m in _GREETING.findall(doc.text) if norm(m) not in _GENERIC_ADDRESSEE]
+    # A one-word greeting ("Dear Investor") names a role, not a person: people have a first name and a surname.
+    named += [m for m in _GREETING.findall(doc.text) if norm(m) not in _GENERIC_ADDRESSEE and len(norm(m).split()) > 1]
     return any(not same_name(n.split(",")[0], customer) for n in named)
 
 
@@ -1157,9 +1159,123 @@ def group_company(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- RFI twins: one document missing
+
+FUNDED_PURCHASE_MAX_DAYS = 2
+FUNDED_PURCHASE_MAX_RATIO = 1.5  # the customer tops up from their own money; a pass-through keeps a cut instead
+
+
+def _own_round_trip(b: CaseBundle, txns: list[dict]):
+    """Money in from an account in the customer's own name and back out to that same account, same amount, with no
+    document showing the customer holds it."""
+    customer = b.customer.get("name")
+    for t in txns:
+        if t.get("direction") != "in" or not same_name(t.get("counterparty_name"), customer) \
+                or len(_digits(t.get("counterparty_account"))) < 6:
+            continue
+        back = [e for e in b.txns.values() if e.get("direction") == "out" and _same_amount(e["amount_gbp"], t["amount_gbp"])
+                and _same_account(e.get("counterparty_account"), t.get("counterparty_account"))
+                and e.get("booked_at", "") > t.get("booked_at", "")]
+        if back:
+            e = back[0]
+            return ([t, e], "RFI_SOURCE_OF_FUNDS",
+                    f"{money(t['amount_gbp'])} came in from account {t['counterparty_account']} in "
+                    f"{customer}'s name on {fmt_date(_txn_date(t))} ({t['transaction_id']}) and went back to it on "
+                    f"{fmt_date(_txn_date(e))} ({e['transaction_id']}), but nothing on file shows the customer holds "
+                    f"that account; ask for a statement of account {t['counterparty_account']} in the customer's name "
+                    f"(or the cancellation confirmation).")
+    return None
+
+
+def _funded_purchase(b: CaseBundle, txns: list[dict]):
+    """Money in from one company, then within days a slightly larger payment to another company (the customer adds
+    their own money): a purchase funded by a loan, a returned deposit and the like, with neither document on file."""
+    customer = b.customer.get("name")
+    for t in txns:
+        payer = _party(t.get("counterparty_name"))
+        if t.get("direction") != "in" or not _is_company(payer) or same_name(payer, customer):
+            continue
+        for e in sorted(b.txns.values(), key=lambda e: e.get("booked_at", "")):
+            payee = _party(e.get("counterparty_name"))
+            gap = ((_txn_date(e) or date.min) - (_txn_date(t) or date.max)).days
+            if (e.get("direction") == "out" and _is_company(payee) and not same_name(payee, payer)
+                    and 0 <= gap <= FUNDED_PURCHASE_MAX_DAYS and e.get("booked_at", "") > t.get("booked_at", "")
+                    and t["amount_gbp"] < e["amount_gbp"] <= t["amount_gbp"] * FUNDED_PURCHASE_MAX_RATIO):
+                return ([t, e], "RFI_PURPOSE_DOCUMENTS",
+                        f"{money(t['amount_gbp'])} from {payer} ('{t.get('reference')}', {t['transaction_id']}) was "
+                        f"followed on {fmt_date(_txn_date(e))} by {money(e['amount_gbp'])} to {payee} "
+                        f"('{e.get('reference')}', {e['transaction_id']}), which looks like a purchase the customer "
+                        f"topped up, but nothing on file documents either side; ask for the agreement or letter behind "
+                        f"the money from {payer} and the invoice or receipt for the payment to {payee}.")
+    return None
+
+
+def _invoiced_receipts(b: CaseBundle, txns: list[dict]):
+    """A business receiving money from several companies, each payment carrying a numbered reference (customers
+    paying its invoices), with no invoices on file."""
+    if b.customer.get("kind") != "business":
+        return None
+    ins = [t for t in txns if t.get("direction") == "in" and _is_company(t.get("counterparty_name"))
+           and not same_name(t.get("counterparty_name"), b.customer.get("name"))
+           and re.search(r"\d{3,}", t.get("reference") or "")]
+    if len({name_key(_party(t["counterparty_name"])) for t in ins}) < 2:
+        return None
+    refs = ", ".join(f"{t.get('reference')} from {_party(t['counterparty_name'])}" for t in ins[:4])
+    return (ins, "RFI_PURPOSE_DOCUMENTS",
+            f"{len(ins)} payments from different companies, each with its own reference ({refs}), fit the customer's "
+            f"business, but no invoices are on file; ask for the invoices behind these receipts"
+            + (" and for the invoice behind the held payment." if b.case.get("held_payment_id") else "."))
+
+
+def _staged_payments(b: CaseBundle, txns: list[dict]):
+    """Payments to one beneficiary whose references run 1, 2, 3... after a common prefix: stage payments under a
+    contract, with no payment schedule on file."""
+    outs = [t for t in txns if t.get("direction") == "out"]
+    if len(outs) < 2 or len({name_key(_party(t.get("counterparty_name"))) for t in outs}) != 1:
+        return None
+    parsed = [re.match(r"^(.*?)(\d{1,2})\s*$", (t.get("reference") or "").strip()) for t in outs]
+    if not all(parsed) or len({p[1].strip().lower() for p in parsed}) != 1 or not parsed[0][1].strip():
+        return None
+    if sorted(int(p[2]) for p in parsed) != list(range(1, len(outs) + 1)):
+        return None
+    payee = _party(outs[0].get("counterparty_name"))
+    return (outs, "RFI_PURPOSE_DOCUMENTS",
+            f"{len(outs)} payments to {payee} referenced '{parsed[0][1].strip()} 1' to '{len(outs)}' "
+            f"({money(sum(t['amount_gbp'] for t in outs))} in all) look like stage payments under a contract, but no "
+            f"payment schedule is on file; ask for the contract and its payment schedule.")
+
+
+_TWINS = (_own_round_trip, _funded_purchase, _invoiced_receipts, _staged_payments)
+
+
+def missing_document(b: CaseBundle) -> Checks:
+    """The RFI twins: a recognisable, unsuspicious pattern whose one deciding document is missing. Each fires only when
+    its transactions would account for the alert (without them it wouldn't have fired). A partial signal never closes;
+    a red flag still wins, and so does an explanation from another check."""
+    signals: list[Signal] = []
+    for a in b.alerts:
+        txns = b.alert_txns(a)
+        for twin in _TWINS:
+            hit = twin(b, txns)
+            if not hit:
+                continue
+            covered, code, facts = hit
+            if a.get("rule_id") != "TM03" and not _own_covers(b, a, txns, {t["transaction_id"]: None for t in covered}):
+                continue
+            if a.get("rule_id") == "TM03" and {t["transaction_id"] for t in covered} != set(a.get("transaction_ids", [])):
+                continue
+            signals.append(Signal(
+                alert_id=a["alert_id"], kind="partial", code=code, facts=facts,
+                evidence=list(dict.fromkeys(t["transaction_id"] for t in covered))[:8], strength="hard",
+                source=f"explainers.missing_document.{twin.__name__.lstrip('_')}",
+            ))
+            break
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Next: RFI twins for missing documents, TM10 redundancy (DOCUMENTED_EVENT) (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
+# Next: TM10 redundancy (DOCUMENTED_EVENT) (also the payments and FX TM07 supplier invoice), collection_documented, group_company,
 # third_party_documented, own account on payments and FX (outgoing own-account transfer; needs a team decision).
 # list_match_different_party is Lorenzo's (red_flags.listed_party).
 CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches,
-                third_party_documented, collection_documented, group_company]
+                third_party_documented, collection_documented, group_company, missing_document]

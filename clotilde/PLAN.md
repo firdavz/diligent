@@ -10,7 +10,7 @@ payments 22, investment 0). Everything else fell back to RFI/ESCALATE, so explai
 ## Status (updated after each check)
 
 `CHECKS = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches,
-third_party_documented, collection_documented, group_company]` on `track1-alert-closing`
+third_party_documented, collection_documented, group_company, missing_document]` on `track1-alert-closing`
 (PR #1 merged; the `clotilde` branch is retired).
 
 | Check → code | Rules | Close when (all hold) | Commit |
@@ -23,7 +23,8 @@ third_party_documented, collection_documented, group_company]` on `track1-alert-
 | `invoice_matches` → `INVOICE_MATCHES` | TM01, TM02, TM03, TM04, TM06, TM08 | an invoice / contract / schedule row / payment-file row has the amount, names the counterparty, carries the reference number, is dated 0–90 days before a payment (receipts: up to 7 days after if the row has the reference), names no other buyer or pay-to account; TM03 needs every payment matched, TM04 the parties left within the limit | ✅ pushed |
 | `third_party_documented` → `THIRD_PARTY_DOCUMENTED` | TM01, TM02, TM08 | a gift letter from the payer ("I, X" / "from X") to the customer for the amount, dated 0–30 days before; or an invoice-finance advance: an agreement with the payer + the payer's remittance advice to the customer for the amount (0–7 days before), and total × advance rate = the credit when both are given. TM22 + gift letter: Lorenzo's DOB check decides the list match | ✅ pushed |
 | `collection_documented` → `COLLECTION_DOCUMENTED` / `RFI_PURPOSE_DOCUMENTS` | TM02, TM04 | a booking confirmation lists the customer and the payers (listed travellers × price per person = total); each payer paid the price (a listed traveller paying another amount contradicts it); the total was paid as instructed (company, account, reference). **RFI twin**, only when no confirmation is on file: ≥ 3 people pay the same amount, then (N+1)× or N× that amount goes to a company with a numbered reference → ask for the booking confirmation | ✅ pushed |
-| `group_company` → `GROUP_COMPANY` (+ `INVOICE_MATCHES` for a held payment) | TM01, TM02, TM08 | a group structure table shows the payer controls the customer, is controlled by it, or shares its ultimate owner, each link ≥ 75% (the register's control threshold); the customer's register controllers must appear in its chain; payments out in the same alert matched to invoices, and an invoice-matched held payment is reported as INVOICE_MATCHES so the payments-and-FX invoice rule releases it | this commit |
+| `group_company` → `GROUP_COMPANY` (+ `INVOICE_MATCHES` for a held payment) | TM01, TM02, TM08 | a group structure table shows the payer controls the customer, is controlled by it, or shares its ultimate owner, each link ≥ 75% (the register's control threshold); the customer's register controllers must appear in its chain; payments out in the same alert matched to invoices, and an invoice-matched held payment is reported as INVOICE_MATCHES so the payments-and-FX invoice rule releases it | ✅ pushed |
+| `missing_document` → RFI twins | any | a recognisable, unsuspicious pattern with its one deciding document missing, only when its transactions account for the alert: own-name round trip (→ RFI_SOURCE_OF_FUNDS, ask for the statement); money in from a company then within 2 days a slightly larger payment (≤ 1.5×) to another company (→ RFI_PURPOSE_DOCUMENTS, ask for both documents); a business receiving from ≥ 2 companies with numbered references (→ ask for the invoices); stage payments to one payee referenced 1…n (→ ask for the schedule). Red flags and explanations still win | this commit |
 
 **TM02 coverage follows the policy wording:** where TM02 counts only money "from anyone other than the client"
 (payments and FX), explaining the third-party money is enough; elsewhere both what's left coming in and going out must
@@ -41,6 +42,11 @@ Results on the team labels (rules only, after each step; **wrongful closes 0 thr
 After Andrei's 40 new labels (closable closed / cost saved), + `group_company`: bank 36/36 (96%), e-money 32/32 (95%),
 investment 31/34 (89%), payments and FX 16 → **19/27** (61% → 69%). Wrongful closes 0.
 
+On 326 labels, + `missing_document` and the one-word-greeting fix (right verdicts / cost saved): bank **83/83 (100%)**,
+e-money **78/78 (100%)**, investment 80/85 (91%), payments and FX 66/80 (73%); 17 labelled cases fixed, none made
+worse. The greeting fix ("Dear Investor", "Dear valued client" are roles, not someone else) also closes 12 refunds
+that had been escalated.
+
 **What's left on the labels:** missing-document RFI twins still escalated (bank 3, e-money 3, investment 3, payments
 and FX 7); TM10 redundancy letter (investment 3); payments and FX shapes resting on the undocumented UK funding account
 (8 — the labels say CLOSE, Fedya's SOP reading says RFI: to align with Andrei or the organisers).
@@ -57,7 +63,7 @@ letters, remittance advices and refund confirmations, and an original payment ca
 fix one invoice line of £X could explain several payments of £X (a wrongful-close risk on TM03 structuring). No
 development case changed; 5 tests pin it down (they fail on the old code).
 
-### Tests — `system/tests/test_explainers.py` (invented data only; 92 tests)
+### Tests — `system/tests/test_explainers.py` (invented data only; 100 tests)
 | Check | What the tests pin down |
 |---|---|
 | `business_records` (11) | all rows match → close; one row missing, one penny off, row dated after or > 2 days before, top-up above the day's takings, two equal deposits with one row → nothing; collection reports emptied the day before cite the cash procedure but not the KYC summary; only TM03; only cash deposits |
@@ -68,6 +74,7 @@ development case changed; 5 tests pin it down (they fail on the old code).
 | `invoice_matches` (11) | hospital invoice → close; invoice dated after the payment, amount differs, other payee, reference number missing, other buyer, other pay-to account → nothing; factoring / employment / insurer documents ignored; financed car needs both the loan agreement and the dealer invoice; stage payments each on their schedule row (held payment cited first), one stage without a row → nothing; payment file covers the contractors and leaves few other parties, too few rows → nothing; own freight invoices may be issued after the receipt when the reference matches, not beyond the grace |
 | `collection_documented` (9) | confirmation listing every payer closes TM02 and TM04; a listed payer paying another amount, the total paid to another account, the customer not on the list, travellers × price ≠ total → nothing; no confirmation + the pattern → RFI asking for it; confirmation the payments don't follow → no RFI either (fallback); payment not a multiple of the shares, fewer than 3 payers → no pattern |
 | `group_company` (6) | sister company with the same 100% owner → close; parent holding → close; share below control, different owners, register naming a controller the chart doesn't show → nothing; held payment with its invoice also reported as INVOICE_MATCHES, without the invoice only GROUP_COMPANY |
+| `missing_document` (7) + greetings (1) | own-name round trip → RFI asking for the statement; funded purchase → RFI asking for both documents; money passed on with a cut, or a payment far larger than the money in → nothing; business receipts from several companies → RFI, one company or an individual customer → nothing; stage payments 1…4 → RFI, stages 1, 2, 4 → nothing; a pattern leaving other large money unexplained → nothing; one-word greetings are roles, a full name is someone else |
 | one document, one transaction (5) | one invoice row, or one invoice without a table, can't explain three equal payments (TM03); three rows for three payments still close; one sale receipt can't explain two cash deposits; one payment can't be refunded twice; one gift letter can't explain two gifts |
 | `third_party_documented` (9) | gift letter from the payer to the customer → close, also TM01 at 9×; letter from someone else, to someone else, amount differs, written after the money → nothing; invoice-finance advance with agreement + remittance advice → close; no agreement, advance ≠ rate × total, advice for another client → nothing |
 
@@ -75,7 +82,7 @@ development case changed; 5 tests pin it down (they fail on the old code).
 1. ~~`refund`~~ ✅  2. ~~`invoice_matches`~~ ✅ (payments and FX purchase-order TM01 and pre-pause-supplier TM07 left out:
    both rest on the undocumented UK funding account — same team decision as own account)
 3. ~~`third_party_documented`~~ ✅
-4. ~~`collection_documented`~~ ✅; ~~`group_company`~~ ✅; next: the missing-document RFI twins, TM10 redundancy, TM10 redundancy (`DOCUMENTED_EVENT`), payments and FX own account (needs a
+4. ~~`collection_documented`~~ ✅; ~~`group_company`~~ ✅; ~~missing-document RFI twins~~ ✅; next: TM10 redundancy, TM10 redundancy (`DOCUMENTED_EVENT`), payments and FX own account (needs a
    team decision: undocumented UK funding account).
 5. Robustness test: reword dev documents (field names, titles, one-penny rounding) and see which checks still hold —
    the unseen set may be worded differently.
