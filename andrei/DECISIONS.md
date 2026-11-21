@@ -93,9 +93,17 @@ Teammates: keep your own notes in a folder named after you, like this one.
   run-to-run reproducibility and makes the cost unpredictable. Judges run with their own key, so an unlisted model may
   simply fail. Revisit only if a fixed, publicly listed Jev version appears and beats Grok on our labels.
 
+## D14 — OpenRouter key live (shared with the team privately)
+- Andrei's key works: $50 credit limit on the key, so a runaway loop can't overspend. Shared by private message only;
+  never in the repo (`.env` is git-ignored). Rotate it after the event.
+- Test: `x-ai/grok-4.3`, temperature 0, seed 7, `response_format: json_object` -> valid JSON, $0.0006 per tiny call.
+- **Grok 4.3 reasons by default** (163 hidden reasoning tokens for a trivial reply). For tier 1, cap or disable
+  reasoning (`reasoning: {"effort": "low"}` or `{"enabled": false}` — Fedya to test which the model accepts): cheaper and
+  less run-to-run variation. Ask for `usage: {"include": true}` to log real cost per call.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
-- [ ] Grok credits via OpenRouter? (D6)
+- [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
 - [ ] Is a pre-filled model cache acceptable? (D6)
 - [ ] Owners for A/B/C/D (see `TEAM.md`).
 - [ ] Measure real tier-1/tier-2 cost and latency on 20 cases; set the tier-2 cap (D13).
