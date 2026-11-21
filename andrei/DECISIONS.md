@@ -124,6 +124,25 @@ Teammates: keep your own notes in a folder named after you, like this one.
 - So Jev stays out of `system/` unless the organisers confirm the decisions endpoint is allowed. Andrei is sending a paper
   on it; revisit then.
 
+## D17 — Reader models: OpenAI without reasoning beats Grok on reproducibility (recommendation for Fedya)
+- Any OpenAI model via OpenRouter chat completions is allowed by the rules (unlike Jev, D16).
+- Test (21 Nov): one real yes/no question about a support chat, 5 identical calls per model, temperature 0, seed 7,
+  JSON output:
+
+  | Model | Identical outputs | Answer | Cost/call | Time |
+  |---|---|---|---|---|
+  | `openai/gpt-4o-mini-2024-07-18` (date-pinned) | 5/5 | yes | $0.00005 | 0.9s |
+  | `openai/gpt-4.1-mini` | 5/5 | yes | $0.00013 | 0.8s |
+  | `openai/gpt-4.1-nano` | 5/5 | yes | $0.00003 | 0.7s |
+  | `x-ai/grok-4.3` (reasoning low) | 2 distinct of 5 | yes | $0.00112 | 3.8s |
+
+- Grok reasons before answering, so its output text varies run to run; non-reasoning OpenAI models were byte-identical,
+  10–35× cheaper, 4× faster.
+- **Recommendation:** tier 1 `openai/gpt-4.1-mini` or the pinned `openai/gpt-4o-mini-2024-07-18` (a pinned snapshot can't
+  change before the judges' runs); tier 2 a larger non-reasoning OpenAI model (e.g. `openai/gpt-4.1`). Grok for the sponsor
+  story outside the scored path, or tier 2 only if a 5-run test shows it stable. The answer cache keeps repeat runs
+  identical whatever the model. `system/tm/reader.py` `TIER_MODELS` is Fedya's to change. Supersedes the model choice in D13.
+
 ## Open questions
 - [ ] How is Track 1 submitted (repo link? portal upload?) — confirm with organisers before 16:30.
 - [x] Model access: Andrei's OpenRouter key ($50 limit) — see D14.
