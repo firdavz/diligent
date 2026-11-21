@@ -872,6 +872,64 @@ class EarlyRedemption(unittest.TestCase):
         self.assertEqual(self.case(with_request=False), [])
 
 
+class DeclaredFunding(unittest.TestCase):
+    CLIENT = {"name": "Testley Supplies Ltd", "kind": "business",
+              "declared": {"expected_channels": ["Bank transfer from own account"]}}
+    FUND = txn("T1", "10-05", "in", 987706.12, "Testley Supplies Ltd", "34-82-15 19921012", "FUNDING")
+    OUT = txn("T2", "10-06", "out", 967952.00, "Testley Supplies Ltd", "IBAN ending 5416", "OWN ACCOUNT TRANSFER",
+              channel="swift")
+    STMT = dated_doc("STM-1", "bank_statement", "**Account holder:** Testley Supplies Ltd\n**Account:** Spanish euro "
+                     "account\n6 October 2026: received £967,952.00. Account IBAN ending 5416 is held by Testley "
+                     "Supplies Ltd.", "2026-10-07", "Statement from Testbanco")
+
+    def tm01(self, multiple):
+        return {"alert_id": "A1", "rule_id": "TM01", "transaction_ids": ["T1"],
+                "measured": {"received_gbp": 987706.12, "baseline_gbp": 435833.33, "multiple": multiple,
+                             "limit_multiple": 2}}
+
+    def codes(self, alerts, docs, txns, customer=None):
+        from tm.explainers import declared_funding
+        return [(s.kind, s.code) for s in declared_funding(own_bundle(alerts, docs, txns, customer=customer or self.CLIENT))[0]]
+
+    def test_declared_funding_passed_to_a_proven_own_account_closes(self):
+        self.assertEqual(self.codes([self.tm01(3.25)], [self.STMT], [self.FUND, self.OUT]), [("explains", "OWN_ACCOUNT")])
+
+    def test_at_five_times_it_asks_for_an_updated_volume(self):
+        self.assertEqual(self.codes([self.tm01(7.26)], [self.STMT], [self.FUND, self.OUT]),
+                         [("partial", "RFI_UPDATED_PROFILE")])
+
+    def test_without_the_statement_nothing(self):
+        self.assertEqual(self.codes([self.tm01(3.25)], [], [self.FUND, self.OUT]), [])
+
+    def test_only_where_the_client_declared_own_account_funding(self):
+        undeclared = {**self.CLIENT, "declared": {"expected_channels": ["Bank transfer"]}}
+        self.assertEqual(self.codes([self.tm01(3.25)], [self.STMT], [self.FUND, self.OUT], undeclared), [])
+
+    def test_order_backed_supplier_payment_closes_with_invoice_matches(self):
+        out = txn("T2", "09-12", "out", 964993.18, "Testdale Export Co", "IBAN ending 7856", "PO 39026", channel="swift")
+        fund = {**self.FUND, "booked_at": "2026-09-11T10:00:00Z", "amount_gbp": 994838.33}
+        inv = dated_doc("INV-1", "supplier_invoice", "**Buyer:** Testley Supplies Ltd\n**Order:** PO 39026\n"
+                        "**Amount:** £964,993.18\n**Pay to:** IBAN ending 7856", "2026-09-08",
+                        "Pro forma invoice from Testdale Export Co")
+        po = dated_doc("ORD-1", "purchase_order", "Dear Testley Supplies Ltd Team,\nOur order PO 39026.", "2026-08-24",
+                       "Purchase order from Buyer Hotels Ltd")
+        alert = {**self.tm01(4.13), "measured": {**self.tm01(4.13)["measured"], "received_gbp": 994838.33}}
+        self.assertEqual(self.codes([alert], [inv, po], [fund, out]), [("explains", "INVOICE_MATCHES")])
+        self.assertEqual(self.codes([alert], [inv], [fund, out]), [])  # no buyer's purchase order on file
+
+    def test_tm07_reverified_with_declared_funding_and_an_invoiced_payment_closes(self):
+        fund = txn("T1", "09-10", "in", 45106.46, "Testley Supplies Ltd", "76-06-12 20110102", "FUNDING")
+        out = txn("T2", "09-11", "out", 42851.14, "Testcombe Industries Co", "IBAN ending 2329", "PO 82485", channel="swift")
+        inv = dated_doc("INV-1", "supplier_invoice", "**Buyer:** Testley Supplies Ltd\n**Amount:** £42,851.14\n"
+                        "**Pay to:** IBAN ending 2329", "2026-09-09", "Invoice for order PO 82485 from Testcombe Industries Co")
+        rvf = dated_doc("RVF-1", "reverification_record", "Identity re-verified on 9 September 2026 with a live selfie.",
+                        "2026-09-09")
+        alert = {"alert_id": "A1", "rule_id": "TM07", "transaction_ids": ["T1", "T2"],
+                 "measured": {"dormant_days": 401, "limit_gbp": 5000}}
+        self.assertEqual(self.codes([alert], [inv, rvf], [fund, out]), [("explains", "RETURNING_CUSTOMER")])
+        self.assertEqual(self.codes([alert], [inv], [fund, out]), [])  # no re-verification
+
+
 class Greetings(unittest.TestCase):
     def test_one_word_greeting_is_a_role_not_another_person(self):
         from tm.explainers import _addressed_elsewhere

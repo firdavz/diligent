@@ -47,7 +47,8 @@ investment 31/34 (89%), payments and FX 16 → **19/27** (61% → 69%). Wrongful
 On 326 labels, + `missing_document` and the one-word-greeting fix (right verdicts / cost saved): bank **83/83 (100%)**,
 e-money **78/78 (100%)**, investment 80/85 (91%), payments and FX 66/80 (73%); 17 labelled cases fixed, none made
 worse. The greeting fix ("Dear Investor", "Dear valued client" are roles, not someone else) also closes 12 refunds
-that had been escalated. + TM10 redundancy: investment **85/85 (100%)**.
+that had been escalated. + TM10 redundancy: investment **85/85 (100%)**. + greeting fix ("Dear former employee") and
+`declared_funding`: payments and FX **79/80**, 36/36 closable closed (RFI 474 → 242 of 1,000). Wrongful closes 0.
 
 **What's left on the labels:** missing-document RFI twins still escalated (bank 3, e-money 3, investment 3, payments
 and FX 7); TM10 redundancy letter (investment 3); payments and FX shapes resting on the undocumented UK funding account
@@ -65,7 +66,7 @@ letters, remittance advices and refund confirmations, and an original payment ca
 fix one invoice line of £X could explain several payments of £X (a wrongful-close risk on TM03 structuring). No
 development case changed; 5 tests pin it down (they fail on the old code).
 
-### Tests — `system/tests/test_explainers.py` (invented data only; 105 tests)
+### Tests — `system/tests/test_explainers.py` (invented data only; 111 tests)
 | Check | What the tests pin down |
 |---|---|
 | `business_records` (11) | all rows match → close; one row missing, one penny off, row dated after or > 2 days before, top-up above the day's takings, two equal deposits with one row → nothing; collection reports emptied the day before cite the cash procedure but not the KYC summary; only TM03; only cash deposits |
@@ -78,6 +79,7 @@ development case changed; 5 tests pin it down (they fail on the old code).
 | `group_company` (6) | sister company with the same 100% owner → close; parent holding → close; share below control, different owners, register naming a controller the chart doesn't show → nothing; held payment with its invoice also reported as INVOICE_MATCHES, without the invoice only GROUP_COMPANY |
 | `missing_document` (7) + greetings (1) | own-name round trip → RFI asking for the statement; funded purchase → RFI asking for both documents; money passed on with a cut, or a payment far larger than the money in → nothing; business receipts from several companies → RFI, one company or an individual customer → nothing; stage payments 1…4 → RFI, stages 1, 2, 4 → nothing; a pattern leaving other large money unexplained → nothing; one-word greetings are roles, a full name is someone else |
 | `early_redemption_explained` (5) | redundancy letter from the declared employer + request to sell → close; letter from another employer, units bought with someone else's money, proceeds paid to someone else, no request to sell → nothing |
+| `declared_funding` (6) | declared own-account funding passed to a statement-proven own account → OWN_ACCOUNT, at 5× → RFI_UPDATED_PROFILE; no statement, or a client who didn't declare that channel → nothing; supplier payment backed by a buyer's purchase order → INVOICE_MATCHES, without the order nothing; TM07 re-verified + declared funding + invoiced payment → RETURNING_CUSTOMER, without re-verification nothing |
 | one document, one transaction (5) | one invoice row, or one invoice without a table, can't explain three equal payments (TM03); three rows for three payments still close; one sale receipt can't explain two cash deposits; one payment can't be refunded twice; one gift letter can't explain two gifts |
 | `third_party_documented` (9) | gift letter from the payer to the customer → close, also TM01 at 9×; letter from someone else, to someone else, amount differs, written after the money → nothing; invoice-finance advance with agreement + remittance advice → close; no agreement, advance ≠ rate × total, advice for another client → nothing |
 
@@ -186,7 +188,10 @@ withdrawal in #3 was cleared by a review).
 - **Document type only narrows a check:** `documented_event` reads only letters, receipts and completion statements
   (not gift letters), so invoices, refunds and gifts get their own code and checks. The verdict still rests on content
   (amount, payer, date, reference); the type filter can only remove closes, never add one. Flag to Andrei re D8.
-- ~~**Payments and FX own account**~~ decided with Fedya (Payments and FX owner): own-account / TM07 / purchase-order
-  shapes that rest on an own-name account with no statement on file stay **RFI** — the POLICY says such an account
-  counts "only when a document on file shows the customer holds it" (D19: the SOP decides), and a wrong RFI costs 3
-  against 10 for a wrong close. Only the organisers could overturn it (open question in D20).
+- **Payments and FX own account — revised (Clotilde, ~15:15).** First decided with Fedya to keep these shapes RFI;
+  revisited because it sent 265 cases to RFI against the SOP-reasoned labels. Now funding from the client's own account
+  counts as the client's money **only where the client declared that channel** ("Bank transfer from own account"):
+  the POLICY treats only funding from someone else's account as a trigger (TM08), every payments-and-FX client declares
+  it, and the TM01 statement shape splits cleanly at the 5× rule (178 below, 32 above) — a split that only makes sense
+  if the own-account rule applies. The own-account clause still needs a statement for the account the money goes to.
+  Result: payments and FX 66/80 → 79/80 right on the labels, 0 wrongful closes. Still an organisers' question (D20).

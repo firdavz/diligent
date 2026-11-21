@@ -1344,10 +1344,140 @@ def early_redemption_explained(b: CaseBundle) -> Checks:
     return signals, []
 
 
+# --------------------------------------------------------------------------- funding through the declared own-account channel
+
+FUNDING_ONWARD_DAYS = 2
+FUNDING_ONWARD_MIN_SHARE = 0.9  # most of the funding goes straight on (the firm's fees and FX margin take the rest)
+
+
+def _declared_own_funding(b: CaseBundle, t: dict) -> bool:
+    """Money in from an account in the client's own name, when the client declared that as how it funds the account
+    ('Bank transfer from own account'). The policy itself treats only funding from someone else's account as a trigger
+    (TM08), so this is the expected channel, not an own-account claim that needs a statement."""
+    channels = (b.customer.get("declared") or {}).get("expected_channels") or []
+    return (t.get("direction") == "in" and same_name(t.get("counterparty_name"), b.customer.get("name"))
+            and any("own account" in (c or "").lower() for c in channels))
+
+
+def _statement_for_ending(b: CaseBundle, t: dict) -> Doc | None:
+    """A statement in the client's name that says the account 'ending NNNN' (the transaction's) is held by the client
+    and records the same amount."""
+    last4 = _digits(t.get("counterparty_account"))[-4:]
+    if len(last4) < 4:
+        return None
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        if (any(same_name(h, b.customer.get("name")) for h in _holders(doc)) and re.search(rf"ending\s+{last4}\b", doc.text)
+                and any(_same_amount(x, t["amount_gbp"]) for x in amounts(doc.text))):
+            return doc
+    return None
+
+
+def _onward(b: CaseBundle, t: dict, test) -> tuple[dict, Doc] | None:
+    """The payment out within days that carries most of funding t on, and the document test(e) finds for it."""
+    td = _txn_date(t)
+    for e in sorted(b.txns.values(), key=lambda e: e.get("booked_at", "")):
+        ed = _txn_date(e)
+        if (e.get("direction") != "out" or not ed or not td or not 0 <= (ed - td).days <= FUNDING_ONWARD_DAYS
+                or e.get("booked_at", "") <= t.get("booked_at", "")
+                or not FUNDING_ONWARD_MIN_SHARE * t["amount_gbp"] <= e["amount_gbp"] <= t["amount_gbp"]):
+            continue
+        doc = test(e)
+        if doc:
+            return e, doc
+    return None
+
+
+def _order_backed(b: CaseBundle, e: dict) -> Doc | None:
+    """The supplier invoice for e, when a purchase order from a buyer to the client carries the same order number."""
+    hit = _invoice_unit_for(b, e, set())
+    if not hit:
+        return None
+    nums = re.findall(r"\d{3,}", e.get("reference") or "")
+    order = next((d for d in b.docs.values() if _kind(d, "order") and nums and all(n in d.text for n in nums)
+                  and _mentioned(b.customer.get("name", ""), d.text)), None)
+    return hit[0] if order else None
+
+
+def declared_funding(b: CaseBundle) -> Checks:
+    """Payments and FX: the client funds its account from its own bank account, as declared. A funding that goes
+    straight on (≥ 90% within 2 days) is explained by where it went:
+    - to an account a statement shows the client holds → OWN_ACCOUNT (TM01 at ≥ own_account_rfi_multiple → RFI);
+    - to a supplier whose invoice matches, for a buyer's purchase order with the same number → INVOICE_MATCHES.
+    TM07: re-verified identity, declared funding, and the payment out matched to its invoice → RETURNING_CUSTOMER."""
+    signals: list[Signal] = []
+    rfi_multiple = b.policy.get("own_account_rfi_multiple")
+    for a in b.alerts:
+        rule = a.get("rule_id")
+        if rule not in ("TM01", "TM07"):
+            continue
+        txns = b.alert_txns(a)
+        fundings = [t for t in txns if _declared_own_funding(b, t)]
+        if not fundings:
+            continue
+        m = a.get("measured", {})
+        if rule == "TM01":
+            for kind_, test, code in (("own", lambda e: _statement_for_ending(b, e) or _statement_for(b, e), "OWN_ACCOUNT"),
+                                      ("order", lambda e: _order_backed(b, e), "INVOICE_MATCHES")):
+                hits = {t["transaction_id"]: (t, *on) for t in fundings for on in [_onward(b, t, test)] if on}
+                if not hits or not _own_covers(b, a, txns, {k: v[2] for k, v in hits.items()}):
+                    continue
+                t, e, doc = next(iter(hits.values()))
+                where = (f"an account {doc.doc_id} shows {b.customer.get('name')} holds" if kind_ == "own"
+                         else f"{_party(e.get('counterparty_name'))}, whose invoice {doc.doc_id} matches it, for the "
+                              f"buyer's purchase order with the same number")
+                facts = (f"The {money(t['amount_gbp'])} funding from {b.customer.get('name')}'s own account on "
+                         f"{fmt_date(_txn_date(t))} ({t['transaction_id']}), the declared funding channel, went on the "
+                         f"next days as {money(e['amount_gbp'])} ({e['transaction_id']}, '{e.get('reference')}') to {where}")
+                evidence = [doc.doc_id] + ([d.doc_id for d in b.docs.values() if kind_ == "order" and _kind(d, "order")])
+                evidence += [t["transaction_id"], e["transaction_id"]]
+                multiple = m.get("multiple")
+                if code == "OWN_ACCOUNT" and rfi_multiple and multiple is not None and multiple >= rfi_multiple:
+                    signals.append(Signal(
+                        alert_id=a["alert_id"], kind="partial", code="RFI_UPDATED_PROFILE",
+                        facts=(f"{facts}, but the funding is {multiple:g} times the declared volume, at or above the "
+                               f"{rfi_multiple} times at which the policy asks for an update; ask the client for an "
+                               f"updated expected annual volume and what it is based on."),
+                        evidence=list(dict.fromkeys(evidence)), strength="hard", source="explainers.declared_funding"))
+                else:
+                    signals.append(Signal(
+                        alert_id=a["alert_id"], kind="explains", code=code, facts=facts + ".",
+                        evidence=list(dict.fromkeys(evidence)), strength="hard", source="explainers.declared_funding"))
+                break
+        else:  # TM07
+            dates = [d for d in (_txn_date(t) for t in txns) if d]
+            if not dates or not m.get("dormant_days") or not m.get("limit_gbp"):
+                continue
+            rv = _reverification(b, min(dates), int(m["dormant_days"]))
+            paid = _match_each_once([t for t in txns if t.get("direction") == "out"],
+                                    lambda t, used: _invoice_unit_for(b, t, used))
+            explained = {**{t["transaction_id"]: None for t in fundings}, **paid}
+            if not rv or not paid or not _own_covers(b, a, txns, explained):
+                continue
+            rv_doc, rv_date = rv
+            outs = [t for t in txns if t["transaction_id"] in paid]
+            facts = (f"Identity was re-verified on {fmt_date(rv_date)} ({rv_doc.doc_id}) before the account moved again "
+                     f"after {m['dormant_days']} days; it was funded from the client's own account (the declared channel) "
+                     f"and " + " and ".join(f"the {money(t['amount_gbp'])} to {_party(t.get('counterparty_name'))} "
+                                            f"({t['transaction_id']}) matches invoice {paid[t['transaction_id']].doc_id}"
+                                            for t in outs) + ".")
+            signals.append(Signal(
+                alert_id=a["alert_id"], kind="explains", code="RETURNING_CUSTOMER", facts=facts,
+                evidence=list(dict.fromkeys([rv_doc.doc_id] + [paid[t["transaction_id"]].doc_id for t in outs]
+                                            + [t["transaction_id"] for t in fundings + outs])),
+                strength="hard", source="explainers.declared_funding"))
+            held = b.case.get("held_payment_id")
+            if held in paid:
+                signals.append(Signal(
+                    alert_id=a["alert_id"], kind="explains", code="INVOICE_MATCHES",
+                    facts=f"{paid[held].doc_id} matches the held payment {held} on amount, payee and reference.",
+                    evidence=[paid[held].doc_id, held], strength="hard", source="explainers.declared_funding"))
+    return signals, []
+
+
 # Add one function per check, (b) -> (signals, questions), and list it here.
-# Left out on purpose: payments and FX shapes resting on an own-name account with no statement on file (own account,
-# purchase order, pre-pause supplier TM07) stay RFI by the POLICY's own-account clause (D19, decided with Fedya; open
-# question to the organisers in D20). list_match_different_party is Lorenzo's (red_flags.listed_party).
+# Funding from the client's own account counts as the client's money only where the client declared that channel
+# (payments and FX): elsewhere an own-name account still needs a statement (POLICY own-account clause).
+# list_match_different_party is Lorenzo's (red_flags.listed_party).
 CHECKS: list = [business_records, own_account, returning_customer, documented_event, refund, invoice_matches,
                 third_party_documented, collection_documented, group_company, missing_document,
-                early_redemption_explained]
+                early_redemption_explained, declared_funding]
