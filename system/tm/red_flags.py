@@ -336,8 +336,10 @@ def third_party_story(b: CaseBundle) -> Checks:
             a = flows[0]
             questions.append(Question(
                 id="chat_shows_third_party_money", alert_id=a["alert_id"],
-                text=("Does the customer say, or does the document show, that the money received or sent belongs to other people, "
-                      "or that someone else controls or uses the account? Answer yes only if the text says so."),
+                text=("Does the customer say that other people use this account to hold or move THEIR money (for example investing, "
+                      "collecting or forwarding money for friends, relatives or clients), or that someone else controls or operates the "
+                      "account? Paying a bill, a purchase or a family member's expense with the customer's own money is NOT that: answer no. "
+                      "Answer yes only if the text says so, and quote the customer's sentence."),
                 doc_ids=[doc.doc_id],
                 if_yes=Signal(alert_id=a["alert_id"], kind="red_flag", code="ESC_ACCOUNT_MISUSE",
                               facts=f"{doc.doc_id} shows the account being used for other people's money or by someone else.",
@@ -597,9 +599,27 @@ def red_flags(b: CaseBundle) -> Checks:
     return signals, questions
 
 
+def contradictory_stories(b: CaseBundle) -> Checks:
+    """Two or more conversations with the customer about the money: only a reader can tell whether the stories clash.
+    A "yes" from D's reader becomes a (soft) red flag on the whole case; "unknown" changes nothing."""
+    docs = [d.doc_id for d in sorted(b.docs.values(), key=lambda d: d.doc_id)
+            if d.type in ("support_chat", "customer_email", "customer_letter") and _customer_words(d)]
+    money_alerts = [a for a in b.alerts if a.get("rule_id") in ("TM01", "TM02", "TM03", "TM05")]
+    if len(docs) < 2 or not money_alerts:
+        return [], []
+    return [], [Question(
+        id="stories_contradict_source", alert_id=money_alerts[0]["alert_id"],
+        text=("These documents record what the customer said about the money in this case. Do they give different, incompatible "
+              "explanations of where the same money came from or what it was for (for example two different sources for the same "
+              "cash)? Answer yes only if the documents themselves show the contradiction, and quote, word for word, the customer's "
+              "sentence giving one of the explanations."),
+        doc_ids=docs,
+        if_yes=Signal(alert_id=ALL_ALERTS, kind="red_flag", code="ESC_UNEXPLAINED_FUNDS",
+                      facts=f"The customer gave incompatible explanations of where the money came from ({', '.join(docs)}), so it has no credible explanation.",
+                      evidence=docs, strength="soft", source="red_flags.stories_contradict_source"))]
+
+
 # Order matters: when several checks fire, the first signal's code becomes the case's reason code, so the most specific go first.
 CHECKS: list = [listed_party, fraud_report, structuring_intent, evasive_routing, invoice_mismatch, linked_new_company,
-                shared_payee_addresses, dissolved_counterparty, corridor_to_individuals, forwarded_to_exchange, third_party_story]
-# Next, once the labels show what separates the traps: mule/pass-through patterns in the transactions
-# (receive-and-forward to linked parties), undeclared high-risk country with third parties,
-# device/login anomalies (account misuse), early redemption with no documented reason.
+                shared_payee_addresses, dissolved_counterparty, corridor_to_individuals, forwarded_to_exchange, third_party_story,
+                contradictory_stories]

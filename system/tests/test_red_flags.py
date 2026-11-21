@@ -143,6 +143,14 @@ class RedFlags(unittest.TestCase):
         alert = {"alert_id": "A1", "rule_id": "TM02", "transaction_ids": ["T1", "T2", "T3"], "measured": {}}
         self.assertEqual(self.codes(bundle([alert], [], ins + [out])), [("red_flag", "ESC_MULE_ACTIVITY")])
 
+    def test_two_chats_about_the_cash_raise_a_question_for_the_reader(self):
+        c1 = doc("CHT-1", "support_chat", "**Agent:** Where is the cash from?\n\n**Customer:** I sold my car.\n")
+        c2 = doc("CHT-2", "support_chat", "**Agent:** Where is the cash from?\n\n**Customer:** My uncle gave it to me.\n")
+        alert = {"alert_id": "A1", "rule_id": "TM05", "transaction_ids": [], "measured": {}}
+        signals, questions = red_flags(bundle([alert], [c1, c2]))
+        self.assertEqual(signals, [])
+        self.assertEqual([(q.id, q.if_yes.code) for q in questions], [("stories_contradict_source", "ESC_UNEXPLAINED_FUNDS")])
+
     def test_ordinary_contact_note_raises_nothing(self):
         note = doc("NTE-2", "contact_note", "Customer called to set up a standing order. Guided them through the app.")
         alert = {"alert_id": "A1", "rule_id": "TM01", "transaction_ids": [], "measured": {}}
