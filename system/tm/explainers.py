@@ -658,6 +658,7 @@ def refund(b: CaseBundle) -> Checks:
         txns = b.alert_txns(a)
         explained: dict[str, Doc] = {}
         used_docs: set = set()
+        unproven: list = []
         pairs = []
         for x in sorted(txns, key=lambda t: (t.get("booked_at", ""), t["transaction_id"])):
             if x["transaction_id"] in explained:
@@ -670,10 +671,26 @@ def refund(b: CaseBundle) -> Checks:
             review = _covering_review(b, e, t)
             if not doc or (_is_cash_in(t) and not (review and re.search(r"withdr", review.get("note", ""), re.I))):
                 continue
+            # A cancellation that sends the money to a named account without saying it is the customer's (and no
+            # statement showing it is): the refund story holds, but where the money went is unproven -> RFI.
+            acct = re.search(r"\d{2}-\d{2}-\d{2}\s?\d{6,8}", doc.text)
+            if (_kind(doc, "cancellation") and acct and not re.search(r"in your name", doc.text, re.I)
+                    and not _statement_for(b, t if t.get("direction") == "out" else e)):
+                unproven.append((t, doc, acct[0]))
+                continue
             used_docs.add(_amount_key(doc, t))
             explained[t["transaction_id"]] = doc
             explained[e["transaction_id"]] = doc
             pairs.append((t, e, doc, review))
+        if not pairs and unproven:
+            t, doc, acct = unproven[0]
+            signals.append(Signal(
+                alert_id=a["alert_id"], kind="partial", code="RFI_SOURCE_OF_FUNDS",
+                facts=(f"{doc.doc_id} ({doc.title}) confirms the cancellation and the return of {money(t['amount_gbp'])} "
+                       f"({t['transaction_id']}) to account {acct}, but neither it nor any statement on file shows that "
+                       f"account is in the customer's name; ask the customer for a statement of account {acct} in their name."),
+                evidence=[doc.doc_id, t["transaction_id"]], strength="hard", source="explainers.refund.unproven_account"))
+            continue
         if not pairs or not _own_covers(b, a, txns, explained):
             continue
         parts, evidence = [], []

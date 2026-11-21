@@ -627,6 +627,34 @@ def weekday_conflicts(b: CaseBundle) -> Checks:
     return [], []
 
 
+_OWNS = re.compile(r"[^.]*\b(under my (ownership|control)|owned by me|my own compan\w*|both mine)\b[^.]*\.?", re.I)
+
+
+def undisclosed_related_payee(b: CaseBundle) -> Checks:
+    """The client says a payee is its own owner's company, but the group structure on file doesn't show it: a 'supplier'
+    payment that is really money moved to a related party (the group chart can't be relied on to explain it)."""
+    outs = {t["counterparty_name"]: t for a in b.alerts for t in b.alert_txns(a)
+            if t.get("direction") == "out" and t.get("counterparty_name")}
+    group = [d for d in b.docs.values() if "group" in d.type]
+    for doc in sorted(b.docs.values(), key=lambda d: d.doc_id):
+        if doc.type in ("due_diligence_summary", "proof_of_address", "company_register_extract") or "group" in doc.type:
+            continue
+        for m in _OWNS.finditer(doc.text):
+            said = m[0]
+            for name, t in sorted(outs.items()):
+                if _doc_mentions(Doc("", "", "", None, said, {}, said), name) and group and \
+                        not any(_doc_mentions(g, name) for g in group):
+                    return [Signal(alert_id=ALL_ALERTS, kind="red_flag", code="ESC_PASS_THROUGH",
+                                   facts=(f"In {doc.doc_id} the director says {name} is under their own ownership "
+                                          f"(\"{' '.join(said.split())[:160]}\"), but the group structure "
+                                          f"({', '.join(g.doc_id for g in group)}) does not show it, so the "
+                                          f"{money(t['amount_gbp'])} 'supplier' payment ({t['transaction_id']}) moves money to an "
+                                          f"undisclosed related party."),
+                                   evidence=[doc.doc_id] + [g.doc_id for g in group] + [t["transaction_id"]],
+                                   source="red_flags.undisclosed_related_payee")], []
+    return [], []
+
+
 def contradictory_stories(b: CaseBundle) -> Checks:
     """Two or more conversations with the customer about the money: only a reader can tell whether the stories clash.
     A "yes" from D's reader becomes a (soft) red flag on the whole case; "unknown" changes nothing."""
@@ -650,4 +678,4 @@ def contradictory_stories(b: CaseBundle) -> Checks:
 # Order matters: when several checks fire, the first signal's code becomes the case's reason code, so the most specific go first.
 CHECKS: list = [listed_party, fraud_report, structuring_intent, evasive_routing, invoice_mismatch, linked_new_company,
                 shared_payee_addresses, dissolved_counterparty, corridor_to_individuals, forwarded_to_exchange, third_party_story,
-                contradictory_stories, weekday_conflicts]
+                contradictory_stories, weekday_conflicts, undisclosed_related_payee]
