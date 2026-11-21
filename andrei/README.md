@@ -20,6 +20,7 @@ stopping at the first that settles it; one rulebook makes every verdict, and mod
 | [`investment-findings.md`](investment-findings.md) | Same for investment |
 | [`payments_fx-findings.md`](payments_fx-findings.md) | Same for payments and FX |
 | [`board/`](board/) | The live team board: its page, dataset and latest snapshot |
+| [`notes-for-team.md`](notes-for-team.md) | Notes and thanks for teammates |
 | [`kickoff-transcript.md`](kickoff-transcript.md) | The organisers' kick-off talk (Granola transcript) and what it means for us |
 | [`CLAUDE.md`](CLAUDE.md) | Rules for coding agents (Claude Code, Cursor, Codex) working in this repo |
 
