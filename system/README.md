@@ -70,8 +70,9 @@ shows each case's checks, reader answers, and verdict as they happen.
 
 ## How well it does (development set)
 
-The development set has no answers, so we built our own reference labels: 226 cases labelled by AI agents reasoning
-through each institution's SOP (doubtful ones settled by quoting the deciding clause), cross-checked by a second model
-family that agreed on 95% of verdicts. Against them: **0 wrongful closes**, CLOSE precision 100%, ESCALATE recall 100%.
-On 514 further unseen cases labelled by that second model, again **0 wrongful closes**. These are AI-made references,
-not ground truth. Detail and history in `andrei/DECISIONS.md`.
+The development set has no answers, so we built our own references: 326 team labels settled against each SOP clause,
+514 confident labels from a second model family, and a blind Grok labelling of all 4,000 cases. Final run (reader on):
+**0 wrongful closes** on the team labels, with 83/83 (bank), 78/78 (e-money), 85/85 (investment) and 80/80 (payments
+and FX) verdicts right; the blind Grok labels agree on 3,996 / 4,000 verdicts. Verdict split: 500 / 250 / 250
+(CLOSE / RFI / ESCALATE) in bank, e-money and investment, 499 / 251 / 250 in payments and FX. These are AI-made
+references, not ground truth. Detail and history in `andrei/DECISIONS.md`.
