@@ -211,6 +211,9 @@ def main():
     for inst in INSTITUTIONS:
         policy = open(os.path.join(ROOT, "data", "institutions", inst, "POLICY.md")).read()
         labels = {json.loads(line)["case_id"]: json.loads(line) for line in open(os.path.join(ROOT, "eval", "labels", f"{inst}.jsonl"))}
+        if os.environ.get("BINEVAL_LABELS"):  # a JSON {case_id: {verdict, reason_code}} reference, e.g. a cross-family consensus
+            ref = json.load(open(os.environ["BINEVAL_LABELS"]))
+            labels.update({k: v for k, v in ref.items() if k[:2] == {"bank": "BK", "emoney": "EM", "investment": "IV", "payments_fx": "PX"}[inst]})
         hol_path = os.path.join(ROOT, "eval", "labels_model", f"{inst}.labelled.jsonl")
         holistic = {json.loads(line)["case_id"]: json.loads(line) for line in open(hol_path)} if os.path.exists(hol_path) else {}
         bs = {b.case["case_id"]: b for b in bundles(inst)}
