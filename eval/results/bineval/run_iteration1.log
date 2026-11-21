@@ -1,0 +1,55 @@
+OK BK-CS127005: bin CLOSE OWN_ACCOUNT [e_kind] | label CLOSE OWN_ACCOUNT
+OK BK-CS121472: bin CLOSE REFUND_OF_EARLIER_PAYMENT [e_kind] | label CLOSE REFUND_OF_EARLIER_PAYMENT
+OK BK-CS100585: bin CLOSE DOCUMENTED_EVENT [e_kind] | label CLOSE DOCUMENTED_EVENT
+OK BK-CS121271: bin CLOSE COLLECTION_DOCUMENTED [e_kind] | label CLOSE COLLECTION_DOCUMENTED
+OK BK-CS144992: bin CLOSE LIST_MATCH_DIFFERENT_PARTY [l_diff] | label CLOSE LIST_MATCH_DIFFERENT_PARTY
+OK BK-CS140335: bin ESCALATE ESC_PASS_THROUGH [r_passthrough] | label ESCALATE ESC_PASS_THROUGH
+XX BK-CS135666: bin CLOSE INVOICE_MATCHES [e_kind] | label ESCALATE ESC_LISTED_PARTY
+OK BK-CS117737: bin ESCALATE ESC_UNEXPLAINED_FUNDS [r_contradict] | label ESCALATE ESC_UNEXPLAINED_FUNDS
+v  BK-CS109535: bin ESCALATE ESC_PASS_THROUGH [r_passthrough] | label ESCALATE ESC_HIGH_RISK_CORRIDOR
+XX BK-CS110017: bin ESCALATE ESC_PASS_THROUGH [r_passthrough] | label RFI RFI_PURPOSE_DOCUMENTS
+XX EM-CS118938: bin RFI RFI_BUSINESS_RECORDS [e_kind (no matching document)] | label CLOSE BUSINESS_RECORDS_RECONCILE
+OK EM-CS113879: bin CLOSE COLLECTION_DOCUMENTED [e_kind] | label CLOSE COLLECTION_DOCUMENTED
+OK EM-CS128058: bin CLOSE OWN_ACCOUNT [e_kind] | label CLOSE OWN_ACCOUNT
+OK EM-CS146361: bin CLOSE DOCUMENTED_EVENT [e_kind] | label CLOSE DOCUMENTED_EVENT
+OK EM-CS127629: bin CLOSE DOCUMENTED_EVENT [e_kind] | label CLOSE DOCUMENTED_EVENT
+OK EM-CS307756: bin RFI RFI_SOURCE_OF_FUNDS [nothing explains it] | label RFI RFI_SOURCE_OF_FUNDS
+OK EM-CS102434: bin ESCALATE ESC_MULE_ACTIVITY [r_fraud] | label ESCALATE ESC_MULE_ACTIVITY
+OK EM-CS108256: bin ESCALATE ESC_UNEXPLAINED_FUNDS [r_contradict] | label ESCALATE ESC_UNEXPLAINED_FUNDS
+OK EM-CS136906: bin RFI RFI_COUNTERPARTY_DETAILS [list unsettled] | label RFI RFI_COUNTERPARTY_DETAILS
+v  EM-CS123511: bin RFI RFI_SOURCE_OF_FUNDS [nothing explains it] | label RFI RFI_PURPOSE_DOCUMENTS
+OK IV-CS181413: bin CLOSE LIST_MATCH_DIFFERENT_PARTY [l_diff] | label CLOSE LIST_MATCH_DIFFERENT_PARTY
+OK IV-CS101670: bin CLOSE OWN_ACCOUNT [e_kind] | label CLOSE OWN_ACCOUNT
+OK IV-CS169053: bin CLOSE LIST_MATCH_DIFFERENT_PARTY [l_diff] | label CLOSE LIST_MATCH_DIFFERENT_PARTY
+OK IV-CS171647: bin CLOSE THIRD_PARTY_DOCUMENTED [e_kind] | label CLOSE THIRD_PARTY_DOCUMENTED
+OK IV-CS123085: bin CLOSE OWN_ACCOUNT [e_kind] | label CLOSE OWN_ACCOUNT
+OK IV-CS220244: bin ESCALATE ESC_UNEXPLAINED_FUNDS [r_contradict] | label ESCALATE ESC_UNEXPLAINED_FUNDS
+v  IV-CS133439: bin ESCALATE ESC_PASS_THROUGH [r_passthrough] | label ESCALATE ESC_MULE_ACTIVITY
+OK IV-CS114634: bin RFI RFI_SOURCE_OF_FUNDS [nothing explains it] | label RFI RFI_SOURCE_OF_FUNDS
+OK IV-CS371780: bin ESCALATE ESC_LISTED_PARTY [l_same] | label ESCALATE ESC_LISTED_PARTY
+v  IV-CS106041: bin ESCALATE ESC_PASS_THROUGH [r_passthrough] | label ESCALATE ESC_EARLY_REDEMPTION
+OK PX-CS202355: bin CLOSE THIRD_PARTY_DOCUMENTED [e_kind] | label CLOSE THIRD_PARTY_DOCUMENTED
+XX PX-CS159922: bin RFI RFI_PURPOSE_DOCUMENTS [e_kind (no matching document)] | label CLOSE INVOICE_MATCHES
+OK PX-CS222834: bin CLOSE REFUND_OF_EARLIER_PAYMENT [e_kind] | label CLOSE REFUND_OF_EARLIER_PAYMENT
+XX PX-CS130081: bin RFI RFI_SOURCE_OF_FUNDS [e_all] | label CLOSE OWN_ACCOUNT
+OK PX-CS131483: bin CLOSE INVOICE_MATCHES [e_kind] | label CLOSE INVOICE_MATCHES
+v  PX-CS181828: bin RFI RFI_SOURCE_OF_FUNDS [nothing explains it] | label RFI RFI_BUSINESS_RECORDS
+OK PX-CS100487: bin ESCALATE ESC_LISTED_PARTY [l_same] | label ESCALATE ESC_LISTED_PARTY
+v  PX-CS114166: bin ESCALATE ESC_INVOICE_MISMATCH [r_invoice_mismatch] | label ESCALATE ESC_HIGH_RISK_CORRIDOR
+v  PX-CS121990: bin RFI RFI_SOURCE_OF_FUNDS [nothing explains it] | label RFI RFI_PURPOSE_DOCUMENTS
+OK PX-CS162667: bin RFI RFI_UPDATED_PROFILE [5x rule (code)] | label RFI RFI_UPDATED_PROFILE
+
+BinEval table: verdict 35/40, code 28/40, wrongful closes 1
+Holistic labeller on the same cases: verdict 38/40, code 32/40
+ miss BK-CS135666 bin ['CLOSE', 'INVOICE_MATCHES', 'e_kind'] label ['ESCALATE', 'ESC_LISTED_PARTY'] e_kind ('invoice', 1.0) yes: ['e_amount', 'e_party', 'e_dated', 'alert_TM22']
+ miss BK-CS109535 bin ['ESCALATE', 'ESC_PASS_THROUGH', 'r_passthrough'] label ['ESCALATE', 'ESC_HIGH_RISK_CORRIDOR'] e_kind ('none', 1.0) yes: ['e_party', 'r_passthrough', 'r_corridor']
+ miss BK-CS110017 bin ['ESCALATE', 'ESC_PASS_THROUGH', 'r_passthrough'] label ['RFI', 'RFI_PURPOSE_DOCUMENTS'] e_kind ('none', 1.0) yes: ['e_party', 'r_passthrough']
+ miss EM-CS118938 bin ['RFI', 'RFI_BUSINESS_RECORDS', 'e_kind (no matching document)'] label ['CLOSE', 'BUSINESS_RECORDS_RECONCILE'] e_kind ('business_records', 1.0) yes: ['e_amount', 'e_party', 'e_all', 'alert_TM03']
+ miss EM-CS123511 bin ['RFI', 'RFI_SOURCE_OF_FUNDS', 'nothing explains it'] label ['RFI', 'RFI_PURPOSE_DOCUMENTS'] e_kind ('none', 1.0) yes: ['e_party']
+ miss IV-CS133439 bin ['ESCALATE', 'ESC_PASS_THROUGH', 'r_passthrough'] label ['ESCALATE', 'ESC_MULE_ACTIVITY'] e_kind ('none', 1.0) yes: ['e_party', 'r_passthrough']
+ miss IV-CS106041 bin ['ESCALATE', 'ESC_PASS_THROUGH', 'r_passthrough'] label ['ESCALATE', 'ESC_EARLY_REDEMPTION'] e_kind ('none', 1.0) yes: ['e_party', 'e_dated', 'r_passthrough']
+ miss PX-CS159922 bin ['RFI', 'RFI_PURPOSE_DOCUMENTS', 'e_kind (no matching document)'] label ['CLOSE', 'INVOICE_MATCHES'] e_kind ('invoice', 0.88) yes: ['e_amount', 'e_party', 'e_all', 'alert_TM08']
+ miss PX-CS130081 bin ['RFI', 'RFI_SOURCE_OF_FUNDS', 'e_all'] label ['CLOSE', 'OWN_ACCOUNT'] e_kind ('own_account', 0.96) yes: ['e_amount', 'e_party', 'own_holds']
+ miss PX-CS181828 bin ['RFI', 'RFI_SOURCE_OF_FUNDS', 'nothing explains it'] label ['RFI', 'RFI_BUSINESS_RECORDS'] e_kind ('none', 1.0) yes: ['e_party', 'e_dated']
+ miss PX-CS114166 bin ['ESCALATE', 'ESC_INVOICE_MISMATCH', 'r_invoice_mismatch'] label ['ESCALATE', 'ESC_HIGH_RISK_CORRIDOR'] e_kind ('invoice', 0.94) yes: ['e_amount', 'r_contradict', 'r_invoice_mismatch', 'r_corridor']
+ miss PX-CS121990 bin ['RFI', 'RFI_SOURCE_OF_FUNDS', 'nothing explains it'] label ['RFI', 'RFI_PURPOSE_DOCUMENTS'] e_kind ('none', 1.0) yes: ['e_party']

@@ -1,0 +1,180 @@
+{
+ "version": "sop-f07d7c7e",
+ "totals": {
+  "bin": 36,
+  "bin_code": 32,
+  "holistic": 36,
+  "holistic_code": 33,
+  "n": 40,
+  "bin_wrongful": 0
+ },
+ "misses": [
+  {
+   "case_id": "BK-CS184065",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party",
+    "r_passthrough",
+    "r_mule",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "BK-CS120515",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_UNEXPLAINED_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    0.99
+   ],
+   "yes": [
+    "e_party",
+    "e_dated"
+   ]
+  },
+  {
+   "case_id": "EM-CS202096",
+   "bin": [
+    "ESCALATE",
+    "ESC_MULE_ACTIVITY",
+    "r_mule"
+   ],
+   "label": [
+    "ESCALATE",
+    "ESC_HIGH_RISK_CORRIDOR"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party",
+    "r_passthrough",
+    "r_mule",
+    "r_corridor"
+   ]
+  },
+  {
+   "case_id": "EM-CS104805",
+   "bin": [
+    "RFI",
+    "RFI_COUNTERPARTY_DETAILS",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party"
+   ]
+  },
+  {
+   "case_id": "IV-CS172933",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "CLOSE",
+    "DOCUMENTED_EVENT"
+   ],
+   "e_kind": [
+    "one_off_event",
+    0.96
+   ],
+   "yes": [
+    "e_party",
+    "e_all",
+    "alert_TM10"
+   ]
+  },
+  {
+   "case_id": "PX-CS139295",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "nothing explains it"
+   ],
+   "label": [
+    "CLOSE",
+    "REFUND_OF_EARLIER_PAYMENT"
+   ],
+   "e_kind": [
+    "refund",
+    0.99
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated",
+    "alert_TM06",
+    "alert_TM08"
+   ]
+  },
+  {
+   "case_id": "PX-CS123336",
+   "bin": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS",
+    "e_kind (no matching document)"
+   ],
+   "label": [
+    "CLOSE",
+    "INVOICE_MATCHES"
+   ],
+   "e_kind": [
+    "invoice",
+    0.72
+   ],
+   "yes": [
+    "e_amount",
+    "e_party",
+    "e_dated"
+   ]
+  },
+  {
+   "case_id": "PX-CS132952",
+   "bin": [
+    "RFI",
+    "RFI_SOURCE_OF_FUNDS",
+    "rfi_ask"
+   ],
+   "label": [
+    "RFI",
+    "RFI_PURPOSE_DOCUMENTS"
+   ],
+   "e_kind": [
+    "none",
+    1.0
+   ],
+   "yes": [
+    "e_party"
+   ]
+  }
+ ]
+}
